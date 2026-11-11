@@ -119,7 +119,7 @@ sequenceDiagram
     W->>G: Submit finding or proposal
     G->>DB: Atomically save message and outbox row
     O->>DB: Lease pending outbox rows
-    O->>T: Signal message ID; duplicates possible
+    O->>T: Signal message ID (duplicates possible)
     T->>C: Schedule deduplicated proposal processing
     C->>DB: Accept validated patch at expected version
     DB-->>API: Persisted run events available
