@@ -4,6 +4,48 @@ Capacity: approximately eight hours per week, 48 hours total. This is a constrai
 
 Design reference: [visual architecture and technical decisions](visual-architecture.md).
 
+## Learning and career objective
+
+The builder enjoys learning deeply and is targeting applied AI engineering at Anthropic. This project should develop transferable engineering judgment and produce evidence of that judgment; it is not a claim about Anthropic's hiring requirements or a guarantee of employment.
+
+Optimize for understanding, useful agent behavior, reliable execution, and measured security boundaries. Technology count is not a success metric. Keep the six-week release focused, and continue deeper experiments afterward rather than rushing through unfamiliar concepts.
+
+### How to learn while building
+
+Explain every Unix/shell command before running it: its purpose, important flags and operators, expected output, and whether it changes data. Relate the actual output to the concept being learned. Explain new commands fully; use short reminders for repeated commands. Introduce commands as part of the current task rather than overwhelming the learner with unrelated shell material. See [command reference](learning/02-terminal-commands.md).
+
+For each milestone:
+
+1. Explain the problem and predict the failure mode before implementing the solution.
+2. Build a small working slice and inspect its messages, database changes, and traces.
+3. Deliberately break it: kill a worker, repeat a message, inject malicious content, or change shared state concurrently.
+4. Explain the observed behavior and compare it with the prediction.
+5. Record the result, tradeoff, and remaining uncertainty in a short learning journal and architecture decision record.
+
+Prefer coaching through consequential decisions over copying unexplained infrastructure. The builder should personally implement and explain representative pieces: one agent observe/act step, one tool authorization check, one transactional outbox operation, one conditional plan update, and one evaluation case. AI assistance can accelerate scaffolding and review while these exercises preserve hands-on understanding.
+
+### Applied AI depth to demonstrate
+
+| Area | Learning exercise | Evidence |
+|---|---|---|
+| Agent behavior | Inspect tool schemas, observation quality, context growth, termination, and replanning | Annotated traces of a successful run and a failed run |
+| Evaluation | Define a small held-out task set, explicit rubrics, deterministic checks, and repeated trials | Versioned evaluation report with model/configuration, cost, latency, and failure categories |
+| Baselines | Compare a single agent with the multi-agent system on equivalent tasks and budget | Explain when coordination helps and when it adds overhead |
+| Experimentation | Change one factor at a time, such as tool description, screenshot strategy, or handoff schema | Before/after results with limitations and unsuccessful experiments retained |
+| Security | Distinguish model compliance from externally enforced authority | Reproducible adversarial cases and a precise account of what was blocked |
+| Distributed systems | Trace retries, duplicate delivery, stale updates, and recovery | Failure-injection walkthrough and architecture decisions |
+| Product usefulness | Watch testers attempt actual everyday tasks | Concrete feedback, observed failures, and resulting changes |
+
+Use deterministic assertions where possible and human review for subjective usefulness. If model-based grading is introduced, calibrate it against human judgments and do not treat the grader's output as ground truth. Avoid broad success claims from a tiny benchmark or tests used repeatedly for prompt tuning.
+
+Keep a provider-neutral adapter. If Anthropic models are evaluated, learn their current official tool-use and computer-use interfaces directly and document integration choices; do not select a model solely because of the employer target. Provider selection remains benchmark-driven.
+
+### Sustainable weekly allocation
+
+Within the approximate eight-hour weekly budget, reserve about five hours for implementation, two for experiments and underlying concepts, and one for documenting and explaining results. Reduce optional feature scope when necessary to protect learning time. Revisit the timeline if an essential security or reliability requirement cannot be completed honestly within it.
+
+Suggested portfolio artifacts: a working demo, readable source, architecture decision records, a concise threat model, reproducible evaluations, and a technical write-up explaining one difficult failure and its resolution. Resume claims must describe implemented behavior and measured results. Check current official job descriptions when preparing an actual application rather than assuming this plan mirrors a particular role.
+
 ## Week 1 — One useful, constrained desktop agent
 
 * Set up Next.js, FastAPI, Python tooling, PostgreSQL migrations, and Docker Compose.

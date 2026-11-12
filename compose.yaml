@@ -1,0 +1,24 @@
+services:
+  db:
+    # A managed local PostgreSQL process inside a container, not a database mock.
+    image: postgres:17
+    environment:
+      POSTGRES_USER: crescendo
+      POSTGRES_PASSWORD: crescendo
+      POSTGRES_DB: crescendo
+    ports:
+      # host-address:host-port:container-port; loopback keeps it off the LAN.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # Named volume keeps rows when the container is stopped or recreated.
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Compose can wait for readiness instead of assuming "started" means ready.
+      test: ["CMD-SHELL", "pg_isready -U crescendo -d crescendo"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:
+
