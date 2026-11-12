@@ -25,7 +25,7 @@ def require_local_token(
     # Depends asks FastAPI to supply parsed credentials. compare_digest avoids
     # a comparison that exits at the first mismatching character. This shared
     # development token is not a user identity or production authorization system.
-    expected = get_settings().dev_api_token()
+    expected = get_settings().dev_api_token.get_secret_value()
     if credentials is None or not compare_digest(credentials.credentials.encode(), expected.encode()):
         raise HTTPException(status_code=401, detail="Invalid local API token", headers={"WWW-Authenticate": "Bearer"})
 
