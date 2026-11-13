@@ -36,6 +36,9 @@ def test_permitted_calls_are_allowed(call):
     navigate("https://169.254.169.254/latest/meta-data/"),    # cloud metadata service
     navigate("https://en.wikipedia.org:8443/"),               # explicit port
     navigate("https://en.wikipedia.org:notaport/"),           # malformed port must not crash
+    navigate("https://[invalid/"),                          # unmatched IPv6 bracket
+    navigate("https://[not-an-ip]/"),                       # invalid bracketed address
+    navigate("https://en.wikipedia.org\uff0fevil.com/"),       # unsafe Unicode host delimiter
 ])
 def test_everything_else_is_denied_with_a_reason(call):
     decision = authorize(GRANT, call)

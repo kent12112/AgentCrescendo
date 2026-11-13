@@ -132,6 +132,8 @@ class E2BDesktop:
         self.max_chars = max_chars
         self.visited: list[str] = []
         self.blocked_requests: list[str] = []
+        self._blocked_document_frames: set[str] = set()
+        self._navigation_failure: Observation | None = None
         session.on("Fetch.requestPaused", self._request_paused)
         session.send("Fetch.enable", {"patterns": [
             {"urlPattern": "*", "requestStage": "Request"},
@@ -149,11 +151,15 @@ class E2BDesktop:
             self.session.send("Fetch.continueRequest", {"requestId": event["requestId"]})
         else:
             self.blocked_requests.append(url)
+            if event["resourceType"] == "Document" and event.get("frameId"):
+                self._blocked_document_frames.add(event["frameId"])
             self.session.send("Fetch.failRequest", {
                 "requestId": event["requestId"], "errorReason": "BlockedByClient",
             })
 
     def observe(self) -> Observation:
+        if self._navigation_failure is not None:
+            return self._navigation_failure
         url = self.page.url
         if url == "about:blank":
             return Observation(None, "Blank desktop. No page is open.")
@@ -171,10 +177,29 @@ class E2BDesktop:
         return Observation(url, text, page_links(url, candidates))
 
     def navigate(self, url: str) -> None:
+        from playwright.sync_api import Error as PlaywrightError
+
         decision = authorize(self.grant, ToolCall("navigate", {"url": url}))
         if not decision.allowed:
             raise ValueError(decision.reason)
-        self.page.goto(url, wait_until="domcontentloaded", timeout=20000)
+        self._blocked_document_frames.clear()
+        try:
+            self.page.goto(url, wait_until="domcontentloaded", timeout=20000)
+        except PlaywrightError as error:
+            # Only a blocked main-frame document explains a recoverable policy
+            # failure. Images and iframe blocks must not hide unrelated errors.
+            if "net::ERR_BLOCKED_BY_CLIENT" not in str(error):
+                raise
+            frame = self.session.send("Page.getFrameTree")["frameTree"]["frame"]["id"]
+            if frame not in self._blocked_document_frames:
+                raise
+            self._navigation_failure = Observation(
+                None,
+                "Navigation blocked by browser policy. No page content was read. "
+                "Choose another permitted source or finish with available information.",
+            )
+            return
+        self._navigation_failure = None
         self.visited.append(self.page.url)
 
 

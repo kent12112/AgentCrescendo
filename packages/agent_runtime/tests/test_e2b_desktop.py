@@ -9,6 +9,94 @@ from crescendo_security.policy import TaskGrant
 GRANT = TaskGrant("test", frozenset({"navigate", "finish"}), frozenset({"en.wikipedia.org"}))
 
 
+def test_blocked_redirect_becomes_observation_and_agent_chooses_another_source():
+    from playwright.sync_api import Error
+    from crescendo_agent.loop import run_agent
+    from crescendo_agent.model import ScriptedModel
+    from crescendo_security.policy import ToolCall
+
+    page, session = Mock(), Mock()
+    page.url = "about:blank"
+    session.send.return_value = {"frameTree": {"frame": {"id": "main"}}}
+    desktop = E2BDesktop(page, session, GRANT)
+    first = "https://en.wikipedia.org/redirect"
+    second = "https://en.wikipedia.org/wiki/Boston"
+
+    def goto(url, **kwargs):
+        if url == first:
+            desktop._request_paused({
+                "requestId": "redirect", "frameId": "main", "resourceType": "Document",
+                "request": {"url": "https://evil.example/", "method": "GET"},
+            })
+            raise Error("net::ERR_BLOCKED_BY_CLIENT")
+        # The model gets a safe observation without reading the failed page.
+        page.locator.assert_not_called()
+        page.url = second
+
+    page.goto.side_effect = goto
+    page.locator.return_value.inner_text.return_value = "Boston facts"
+    page.eval_on_selector_all.return_value = []
+    model = ScriptedModel([
+        ToolCall("navigate", {"url": first}),
+        ToolCall("navigate", {"url": second}),
+        ToolCall("finish", {"answer": "Boston facts", "sources": [second]}),
+    ])
+
+    result = run_agent("Research Boston", GRANT, desktop, model)
+
+    assert result.status == "finished"
+    assert desktop.visited == [second]
+    assert desktop.blocked_requests == ["https://evil.example/"]
+    assert any("Navigation blocked by browser policy" in e.text for e in model.seen[1])
+    assert any("Boston facts" in e.text for e in model.seen[2] if e.kind == "observation")
+    assert desktop.observe().url == second
+    session.send.assert_any_call("Fetch.failRequest", {
+        "requestId": "redirect", "errorReason": "BlockedByClient",
+    })
+
+
+@pytest.mark.parametrize("kind,frame,message", [
+    (None, None, "net::ERR_BLOCKED_BY_CLIENT"),
+    ("Image", "main", "net::ERR_BLOCKED_BY_CLIENT"),
+    ("Document", "iframe", "net::ERR_BLOCKED_BY_CLIENT"),
+    ("Document", "main", "Connection failed"),
+])
+def test_unrelated_navigation_errors_still_propagate(kind, frame, message):
+    from playwright.sync_api import Error
+
+    page, session = Mock(), Mock()
+    session.send.return_value = {"frameTree": {"frame": {"id": "main"}}}
+    desktop = E2BDesktop(page, session, GRANT)
+
+    def goto(*args, **kwargs):
+        if kind:
+            desktop._request_paused({
+                "requestId": "other", "frameId": frame, "resourceType": kind,
+                "request": {"url": "https://evil.example/", "method": "GET"},
+            })
+        raise Error(message)
+
+    page.goto.side_effect = goto
+    with pytest.raises(Error, match=message):
+        desktop.navigate("https://en.wikipedia.org/")
+    assert desktop.visited == []
+
+
+def test_previous_document_block_does_not_hide_later_navigation_error():
+    from playwright.sync_api import Error
+
+    page, session = Mock(), Mock()
+    session.send.return_value = {"frameTree": {"frame": {"id": "main"}}}
+    desktop = E2BDesktop(page, session, GRANT)
+    desktop._request_paused({
+        "requestId": "old", "frameId": "main", "resourceType": "Document",
+        "request": {"url": "https://evil.example/", "method": "GET"},
+    })
+    page.goto.side_effect = Error("Connection failed")
+    with pytest.raises(Error, match="Connection failed"):
+        desktop.navigate("https://en.wikipedia.org/")
+
+
 @pytest.mark.parametrize("websocket", [False, True])
 def test_relay_translates_external_host_and_preserves_websocket_upgrade(websocket):
     namespace = {"__name__": "relay_test"}

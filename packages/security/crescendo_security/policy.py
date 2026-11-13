@@ -47,7 +47,8 @@ def authorize(grant: TaskGrant, call: ToolCall) -> Decision:
     1. call.name must be in grant.allowed_tools. Otherwise deny.
     2. For "navigate":
        a. args["url"] must exist and be a str.
-       b. Parse it with urllib.parse.urlsplit. The scheme must be exactly "https".
+       b. Parse it with urllib.parse.urlsplit; deny parsing errors. The scheme
+          must be exactly "https".
        c. Use .hostname (already lowercased, userinfo removed). It must be in
           grant.allowed_hosts. Do NOT use string tricks such as startswith or "in":
           "en.wikipedia.org.evil.com" and "https://en.wikipedia.org@evil.com"
@@ -69,7 +70,12 @@ def authorize(grant: TaskGrant, call: ToolCall) -> Decision:
         if not isinstance(url, str):
             return Decision(False, "navigate requires a url string.")
         # 2b. urlsplit parses like a browser would; string matching does not.
-        parts = urlsplit(url)
+        try:
+            parts = urlsplit(url)
+        except ValueError:
+            # Malformed model output is a denied proposal, not a reason to
+            # crash the run. Keep the parser's raw error out of the transcript.
+            return Decision(False, "The URL is malformed.")
         if parts.scheme != "https":
             return Decision(False, "Only https URLs are permitted.")
         # 2c. .hostname is the real destination: lowercased, with any "user@" removed.

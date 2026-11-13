@@ -61,6 +61,21 @@ def test_step_limit_stops_a_model_that_never_finishes():
     assert len(desktop.visited) == 5
 
 
+def test_malformed_navigation_is_denied_and_agent_can_replan():
+    desktop = FakeDesktop({WIKI: "Boston facts"})
+    malformed = nav("https://[invalid/")
+    model = ScriptedModel([malformed, nav(WIKI), finish("Boston facts", [WIKI])])
+
+    result = run_agent("Research Boston", GRANT, desktop, model)
+
+    assert result.status == "finished"
+    assert desktop.visited == [WIKI]
+    assert len(result.denied) == 1
+    assert result.denied[0][0] == malformed
+    assert result.denied[0][1].reason == "The URL is malformed."
+    assert any(e.kind == "denied" for e in model.seen[1])
+
+
 def test_deadline_stops_the_loop_even_with_steps_remaining():
     desktop = FakeDesktop({WIKI: "Boston"})
     model = ScriptedModel(repeat(nav(WIKI)))

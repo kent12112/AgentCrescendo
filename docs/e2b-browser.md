@@ -7,6 +7,24 @@ Groq receives page text and proposes tools; the existing gateway authorizes them
 
 ## Run
 
+For a model-free check first, use the terminal where `E2B_API_KEY` is exported:
+
+```sh
+.venv/bin/python scripts/e2b_browser_smoke.py
+```
+
+This creates one metered desktop, loads the Boston Wikipedia page, checks its
+text, and verifies the gateway rejects unlisted and loopback destinations before
+navigation. After adapter cleanup, it calls the provider's `is_running` method
+to confirm termination. If the desktop remains alive, it retries `kill` and
+fails the check. A cleanup-verification error can supersede a browser error;
+inspect the chained traceback in that case. No model key or model calls are used.
+These gateway checks do not establish network-level isolation or live-view access.
+
+Local validation on November 13, 2026: all 93 Python tests passed, including
+mocked smoke-script success, failure cleanup verification, and missing-key cases.
+The new script's live result remains pending user execution.
+
 Install the dependencies from the project root. `-e` links to your local project;
 `[e2b,groq]` selects both optional SDKs. This changes the virtual environment:
 
@@ -63,13 +81,19 @@ the run's transcript; the demo's final summary does not print the full transcrip
 
 This is an initial text-browsing integration, not a screenshot/click agent or an
 authenticated live-view UI. JavaScript-dependent sites will not work. Browser
-navigation failures propagate and still trigger cleanup. Model-reported sources
+navigation failures normally propagate and still trigger cleanup. A policy-blocked
+main-frame navigation instead produces a fixed failure observation, allowing the
+agent to choose another source within its existing step/deadline limits. Recovery
+requires both Chrome's `ERR_BLOCKED_BY_CLIENT` error and an intercepted blocked
+document for the main frame during that navigation. Failed-page content is not
+read or added to successful visits. Image/iframe blocks and unrelated errors do
+not qualify for recovery. Model-reported sources
 are not independently validated against visits.
 
 Unit tests exercise request decisions, simulated redirect events, observations,
 private control connection setup, and cleanup after setup/model errors. No live
 cloud run was performed during implementation; Chrome startup, the relay, and
-actual browser redirect interception still require a live smoke test. There is
+actual E2B browser redirect interception still requires a live smoke test. There is
 no verified claim of complete network isolation. E2B's sandbox-local metadata
 exception remains as documented in the preflight investigation. DNS behavior,
 shared IPs, and traffic outside this instrumented page still rely on E2B controls.
@@ -85,3 +109,16 @@ Decision record: use a text-only browser with an explicit request gate as the
 smallest live research slice. Prediction: Wikipedia loads, while disallowed
 document destinations are aborted before sending. Local unit tests pass; actual
 cloud behavior remains to be measured and recorded after the smoke test.
+
+## Blocked-redirect recovery check
+
+Run `.venv/bin/python scripts/smoke_redirect_recovery.py` from the repository root
+with Playwright and Microsoft Edge installed. It supplies controlled responses
+through CDP: an allowed URL returns a 302 to a forbidden host, then a second allowed
+URL returns a small HTML page. The real Chromium interceptor blocks the redirect;
+a scripted model sees the fixed failure observation, navigates to the second
+source, and finishes. No model or E2B calls are made.
+
+On November 13, 2026, this local browser check passed, as did all 99 Python tests.
+This verifies real Chromium redirect events and recovery using controlled local
+responses, not E2B network enforcement. See the [review record](learning/05-blocked-navigation.md).
