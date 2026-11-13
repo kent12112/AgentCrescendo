@@ -17,12 +17,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+e2b = ["e2b-desktop>=2,<3", "playwright>=1.49,<2", "httpx>=0.28,<1"]
+groq = ["groq>=0.31,<1"]
 dev = ["pytest>=8,<10", "httpx>=0.28,<1"]
 
 [tool.setuptools.packages.find]
-where = ["services/api"]
-include = ["crescendo_api*"]
+where = ["services/api", "packages/agent_runtime", "packages/security"]
+include = ["crescendo_api*", "crescendo_agent*", "crescendo_security*"]
 
 [tool.pytest.ini_options]
-testpaths = ["services/api/tests"]
+testpaths = ["services/api/tests", "packages/security/tests", "packages/agent_runtime/tests"]
 
