@@ -22,6 +22,7 @@ class Run(Base):
         CheckConstraint("timeout_seconds BETWEEN 30 AND 600"),
         CheckConstraint("model_budget_cents BETWEEN 1 AND 500"),
         CheckConstraint("status = 'draft'"),
+        CheckConstraint("length(constraints) <= 1000"),
     )
 
     # The primary key identifies a row. A UUID avoids needing a central ID counter.
@@ -32,6 +33,7 @@ class Run(Base):
     max_workers: Mapped[int] = mapped_column(Integer)
     timeout_seconds: Mapped[int] = mapped_column(Integer)
     model_budget_cents: Mapped[int] = mapped_column(Integer)
+    constraints: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Store an explicit UTC timestamp; PostgreSQL supports timezone-aware storage.
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

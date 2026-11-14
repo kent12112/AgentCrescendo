@@ -7,6 +7,7 @@ from urllib.parse import urldefrag, urljoin, urlsplit
 from crescendo_security.policy import TaskGrant, ToolCall, authorize
 
 from .desktop import Observation, PageLink
+from .page_search import search_passages
 
 
 def page_links(url: str, candidates: list[dict], *, limit=20, max_chars=2000) -> tuple[PageLink, ...]:
@@ -36,7 +37,7 @@ def page_links(url: str, candidates: list[dict], *, limit=20, max_chars=2000) ->
     return tuple(links)
 
 START_BROWSER = '''
-import os, shutil, subprocess, time
+import os, shutil, subprocess, time, urllib.request
 from pathlib import Path
 binary = next((path for name in (
     "google-chrome", "google-chrome-stable", "chromium", "chromium-browser"
@@ -50,10 +51,22 @@ args = [binary, "--no-sandbox", "--disable-dev-shm-usage", "--no-first-run",
 with open("/tmp/crescendo-chrome.log", "wb") as log:
     child = subprocess.Popen(args, stdout=log, stderr=log,
                              env={**os.environ, "DISPLAY": ":0"}, start_new_session=True)
-time.sleep(0.5)
-if child.poll() is not None:
-    raise RuntimeError("Chrome exited during startup: " +
-                       Path("/tmp/crescendo-chrome.log").read_text(errors="replace")[-4000:])
+deadline = time.monotonic() + 45
+opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+while True:
+    code = child.poll()
+    if code is not None:
+        raise RuntimeError("Chrome exited during startup (code " + str(code) + "): " +
+                           Path("/tmp/crescendo-chrome.log").read_text(errors="replace")[-4000:])
+    try:
+        with opener.open("http://127.0.0.1:9222/json/version", timeout=1):
+            break
+    except OSError as exc:
+        if time.monotonic() >= deadline:
+            raise RuntimeError("Chrome debugger port 9222 did not become ready within 45 seconds. " +
+                               "Last error: " + repr(exc) + "\\n" +
+                               Path("/tmp/crescendo-chrome.log").read_text(errors="replace")[-4000:]) from exc
+        time.sleep(0.2)
 '''
 
 # Chrome's debugger listens on loopback. Relay it to a private E2B service port.
@@ -123,13 +136,36 @@ while True:
         time.sleep(0.2)
 '''
 
+# Work on a detached copy: never mutate the page the agent is browsing. The
+# filtered copy supplies both text and links; URL properties honor document.baseURI.
+WIKIPEDIA_CONTENT = """root => {
+    const copy = root.cloneNode(true);
+    copy.querySelectorAll('nav, [role="navigation"], .infobox, .navbox, .sidebar, .metadata, script, style')
+        .forEach(node => node.remove());
+    const walker = document.createTreeWalker(copy, NodeFilter.SHOW_TEXT);
+    const chunks = [];
+    while (walker.nextNode()) {
+        const text = walker.currentNode.textContent.trim();
+        if (text) chunks.push(text);
+    }
+    return {
+        text: chunks.join(' '),
+        links: Array.from(copy.querySelectorAll('a[href]')).slice(0, 400).map(a => ({
+            label: (a.textContent || '').slice(0, 160), url: a.href
+        }))
+    };
+}"""
+
 
 class E2BDesktop:
-    def __init__(self, page: Any, session: Any, grant: TaskGrant, *, max_chars=4000):
+    def __init__(self, page: Any, session: Any, grant: TaskGrant, *, max_chars=4000, screenshot_provider=None, scroll_provider=None, viewer_provider=None):
         self.page = page
         self.session = session
         self.grant = grant
         self.max_chars = max_chars
+        self._screenshot_provider = screenshot_provider
+        self._scroll_provider = scroll_provider
+        self._viewer_provider = viewer_provider
         self.visited: list[str] = []
         self.blocked_requests: list[str] = []
         self._blocked_document_frames: set[str] = set()
@@ -138,6 +174,44 @@ class E2BDesktop:
         session.send("Fetch.enable", {"patterns": [
             {"urlPattern": "*", "requestStage": "Request"},
         ]})
+
+    def capture_screen(self):
+        from .vision import Screenshot
+
+        decision = authorize(self.grant, ToolCall("screenshot"))
+        if not decision.allowed:
+            raise ValueError(decision.reason)
+        if self._screenshot_provider is None:
+            raise RuntimeError("Desktop screenshot provider is not configured.")
+        # Ensure the controlled tab is foregrounded before full-desktop capture.
+        self.page.bring_to_front()
+        image = self._screenshot_provider()
+        # E2B filesystem.read(format="bytes") returns bytearray in this SDK.
+        # Normalize at the provider boundary; Screenshot stays immutable bytes.
+        if isinstance(image, bytearray):
+            image = bytes(image)
+        return Screenshot(image)
+
+    def scroll(self, direction: str, amount: int) -> None:
+        decision = authorize(self.grant, ToolCall("scroll", {"direction": direction, "amount": amount}))
+        if not decision.allowed:
+            raise ValueError(decision.reason)
+        if self._scroll_provider is None:
+            raise RuntimeError("Desktop scroll provider is not configured.")
+        self.page.bring_to_front()
+        # Place the pointer within browser content so wheel events target the page,
+        # rather than a desktop panel or another window. This is a fixed fixture
+        # position, not a general multi-window focus policy.
+        self.page.mouse.move(200, 200)
+        self._scroll_provider(direction=direction, amount=amount)
+
+    def live_view(self):
+        decision = authorize(self.grant, ToolCall("view_desktop"))
+        if not decision.allowed:
+            raise ValueError(decision.reason)
+        if self._viewer_provider is None:
+            raise RuntimeError("Desktop viewer is not configured.")
+        return self._viewer_provider()
 
     def _request_paused(self, event):
         request = event["request"]
@@ -158,22 +232,54 @@ class E2BDesktop:
             })
 
     def observe(self) -> Observation:
+        observation = self._read_content()
+        if len(observation.text) > self.max_chars:
+            return Observation(observation.url, observation.text[:self.max_chars] + "\n[Page text truncated]", observation.links)
+        return observation
+
+    def search_page(self, query: str) -> Observation:
+        if self._navigation_failure is not None:
+            return self._navigation_failure
+        if self.page.url == "about:blank":
+            return Observation(None, "No page is open. Navigate to a permitted source first.")
+        observation = self._read_content()
+        return Observation(observation.url, search_passages(observation.text, query))
+
+    def _read_content(self) -> Observation:
         if self._navigation_failure is not None:
             return self._navigation_failure
         url = self.page.url
         if url == "about:blank":
             return Observation(None, "Blank desktop. No page is open.")
-        text = self.page.locator("body").inner_text(timeout=10000)
-        if len(text) > self.max_chars:
-            text = text[:self.max_chars] + "\n[Page text truncated]"
+        content = self.page.locator("body")
+        text = None
+        candidates = None
+        if urlsplit(url).hostname == "en.wikipedia.org":
+            article = self.page.locator("#mw-content-text .mw-parser-output")
+            if article.count():
+                extracted = article.first.evaluate(WIKIPEDIA_CONTENT)
+                if extracted["text"].strip():
+                    text, candidates = extracted["text"], extracted["links"]
+        for selector in (() if text is not None else ("main", '[role="main"]', "article")):
+            regions = self.page.locator(selector)
+            if regions.count() == 0:
+                continue
+            candidate = regions.first
+            candidate_text = candidate.inner_text(timeout=10000)
+            if candidate_text.strip():
+                content, text = candidate, candidate_text
+                break
+        if text is None:
+            text = content.inner_text(timeout=10000)
         # Automation evaluates this fixed expression even with page scripts disabled.
         # a.href resolves relative links and honors document.baseURI. Never evaluate
         # code supplied by the model or page text.
-        candidates = self.page.eval_on_selector_all("a[href]", """anchors =>
-            anchors.slice(0, 400).map(a => ({
-                label: (a.innerText || a.textContent || '').slice(0, 160),
-                url: a.href
-            }))""")
+        if candidates is None:
+            candidates = content.locator("a[href]").evaluate_all("""anchors =>
+                anchors.slice(0, 400).map(a => ({
+                    label: (a.innerText || a.textContent || '').slice(0, 160),
+                    url: a.href
+                }))""")
         return Observation(url, text, page_links(url, candidates))
 
     def navigate(self, url: str) -> None:
@@ -220,7 +326,7 @@ def open_e2b_desktop(grant: TaskGrant, *, sandbox_type=None, playwright_factory=
         "allow_public_traffic": False,
     })
     try:
-        sandbox.commands.run("python3 -c " + shlex.quote(START_BROWSER), timeout=10)
+        sandbox.commands.run("python3 -c " + shlex.quote(START_BROWSER), timeout=50)
         relay = sandbox.commands.run(
             "python3 -u -c " + shlex.quote(RELAY) + " > /tmp/crescendo-relay.log 2>&1",
             background=True, timeout=0,
@@ -244,9 +350,18 @@ def open_e2b_desktop(grant: TaskGrant, *, sandbox_type=None, playwright_factory=
                     java_script_enabled=False, service_workers="block", accept_downloads=False,
                 )
                 page = context.new_page()
-                desktop = E2BDesktop(page, context.new_cdp_session(page), grant)
+                desktop = E2BDesktop(page, context.new_cdp_session(page), grant,
+                                     screenshot_provider=lambda: sandbox.screenshot(format="bytes"),
+                                     scroll_provider=sandbox.scroll,
+                                     viewer_provider=lambda: _open_live_view(sandbox))
                 yield desktop
             finally:
                 browser.close()
     finally:
         sandbox.kill()
+
+
+def _open_live_view(sandbox):
+    from .live_view import open_live_view
+
+    return open_live_view(sandbox)

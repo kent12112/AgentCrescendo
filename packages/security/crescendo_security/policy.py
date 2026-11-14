@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlsplit
 
+import re
+
 
 @dataclass(frozen=True)
 class TaskGrant:
@@ -55,7 +57,10 @@ def authorize(grant: TaskGrant, call: ToolCall) -> Decision:
           must both be denied.
        d. Deny any explicit port (.port is not None). Reading .port can raise
           ValueError for malformed ports; treat that as a denial too.
-    3. Anything that passes is allowed.
+    3. For "search_page": require exactly one query string, nonblank, containing
+       a word/number, and no longer than 200 characters. It searches the current
+       page; it cannot supply a URL or widen navigation authority.
+    4. Anything that passes is allowed.
 
     Every denial needs a short human-readable reason. The agent sees it in its
     transcript, so it must not reveal secrets, but should explain enough to replan.
@@ -63,6 +68,19 @@ def authorize(grant: TaskGrant, call: ToolCall) -> Decision:
     # 1. Tool allowlist. Unknown or ungranted tools fail closed.
     if call.name not in grant.allowed_tools:
         return Decision(False, f"Tool '{call.name}' is not permitted for this task.")
+
+    if call.name == "search_page":
+        query = call.args.get("query")
+        if (set(call.args) != {"query"} or not isinstance(query, str)
+                or not query.strip() or len(query) > 200 or not re.search(r"\w", query)):
+            return Decision(False, "search_page requires a nonblank query of at most 200 characters containing words or numbers.")
+
+    if call.name == "scroll":
+        if (set(call.args) != {"direction", "amount"}
+                or call.args.get("direction") not in ("up", "down")
+                or type(call.args.get("amount")) is not int
+                or not 1 <= call.args["amount"] <= 5):
+            return Decision(False, "scroll requires direction up/down and an integer amount from 1 to 5.")
 
     if call.name == "navigate":
         # 2a. Model output is untrusted: never assume the argument exists or is a str.

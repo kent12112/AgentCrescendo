@@ -57,10 +57,24 @@ def test_draft_is_persisted_and_retrievable(client):
     assert client.get("/runs", headers=auth()).json() == [run]
 
 
+@pytest.mark.parametrize("sent, stored", [
+    ({}, None),
+    ({"constraints": None}, None),
+    ({"constraints": "   "}, None),
+    ({"constraints": "  no flights  "}, "no flights"),
+])
+def test_blank_constraints_are_stored_as_absent(client, sent, stored):
+    # One meaning, one value: missing, null, and blank all mean "no constraints",
+    # so downstream prompt building only ever checks for None.
+    response = client.post("/runs", headers=auth(), json={"goal": "Plan a weekend trip", **sent})
+    assert response.status_code == 201
+    assert response.json()["constraints"] == stored
+    assert client.get("/runs", headers=auth()).json()[0]["constraints"] == stored
+
 @pytest.mark.parametrize("patch", [
     {"max_workers": 4}, {"max_workers": True}, {"timeout_seconds": 601},
     {"model_budget_cents": 0}, {"model_budget_cents": 501},
-    {"goal": "          "}, {"goal": "x" * 4001}, {"permissions": ["purchase"]},
+    {"goal": "          "}, {"goal": "x" * 4001}, {"constraints": "x" * 1001}, {"permissions": ["purchase"]},
 ])
 def test_invalid_or_escalated_request_is_rejected(client, patch):
     # Parametrize runs this same behavioral check once per invalid payload.
@@ -73,4 +87,30 @@ def test_invalid_or_escalated_request_is_rejected(client, patch):
 def test_capabilities_do_not_claim_execution(client):
     assert client.get("/capabilities", headers=auth()).json()["execution"] is False
     assert client.get("/runs/00000000-0000-0000-0000-000000000000", headers=auth()).status_code == 404
+
+
+def test_delete_draft_persists_and_preserves_other_drafts(client):
+    first = client.post("/runs", headers=auth(), json={"goal": "Research a weekend trip"}).json()
+    second = client.post("/runs", headers=auth(), json={"goal": "Compare beginner cameras"}).json()
+
+    response = client.delete(f"/runs/{first['id']}", headers=auth())
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert client.get(f"/runs/{first['id']}", headers=auth()).status_code == 404
+    assert client.get("/runs", headers=auth()).json() == [second]
+    assert client.delete(f"/runs/{first['id']}", headers=auth()).status_code == 404
+
+
+@pytest.mark.parametrize("headers", [{}, {"Authorization": "Bearer wrong"}])
+def test_unauthorized_delete_preserves_draft(client, headers):
+    run = client.post("/runs", headers=auth(), json={"goal": "Research a weekend trip"}).json()
+
+    assert client.delete(f"/runs/{run['id']}", headers=headers).status_code == 401
+    assert client.get(f"/runs/{run['id']}", headers=auth()).json() == run
+
+
+def test_delete_rejects_missing_and_malformed_ids(client):
+    assert client.delete("/runs/00000000-0000-0000-0000-000000000000", headers=auth()).status_code == 404
+    assert client.delete("/runs/not-a-uuid", headers=auth()).status_code == 422
 

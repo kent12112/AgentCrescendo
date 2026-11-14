@@ -2,7 +2,7 @@
 // belongs to the server and must never use a NEXT_PUBLIC_ environment variable.
 import "server-only";
 
-export async function backend(path: "/runs" | "/capabilities", init?: RequestInit) {
+export async function backend(path: "/runs" | "/capabilities" | `/runs/${string}`, init?: RequestInit) {
   // Restrict destinations to explicit API paths, rather than proxying arbitrary URLs.
   const token = process.env.DEV_API_TOKEN;
   if (!token || token.startsWith("replace-with-") || token.length < 32) {
@@ -18,6 +18,10 @@ export async function backend(path: "/runs" | "/capabilities", init?: RequestIni
       signal: AbortSignal.timeout(5000),
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     });
+    // A successful deletion has no JSON body to parse.
+    if (response.status === 204) {
+      return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+    }
     const data = await response.json();
     // Do not relay backend exception bodies or configuration details to the browser.
     if (response.status >= 500) {

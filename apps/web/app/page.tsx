@@ -13,6 +13,7 @@ type Run = {
   max_workers: number;
   timeout_seconds: number;
   model_budget_cents: number;
+  constraints: string | null;
   created_at: string;
 };
 
@@ -31,11 +32,13 @@ export default function Workspace() {
   // Form state and server-loaded drafts live in React memory. The database is
   // the durable source; refreshing the page reloads it rather than losing drafts.
   const [goal, setGoal] = useState("");
+  const [constraints, setConstraints] = useState("");
   const [workers, setWorkers] = useState(3);
   const [budget, setBudget] = useState(100);
   const [runs, setRuns] = useState<Run[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -58,6 +61,26 @@ export default function Workspace() {
   // loadRuns handles errors itself and updates the visible connection message.
   useEffect(() => { void loadRuns(); }, []);
 
+  async function deleteRun(run: Run) {
+    if (!window.confirm(`Permanently delete this draft?\n\n${run.goal}`)) return;
+    setDeleting(run.id);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch(`/api/runs/${run.id}`, { method: "DELETE" });
+      // A 404 also establishes that the draft is absent (for example, another
+      // tab deleted it). Never parse JSON on an empty 204 response.
+      if (response.status !== 204 && response.status !== 404) {
+        const data = await response.json();
+        throw new Error(errorMessage(data));
+      }
+      setRuns(previous => previous.filter(item => item.id !== run.id));
+      setNotice(response.status === 404 ? "This draft was already deleted." : "Draft deleted.");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Unable to delete draft. Refresh to check its current status.");
+    } finally { setDeleting(null); }
+  }
+
   async function createRun(event: FormEvent) {
     // Handle submission in JavaScript instead of reloading the browser page.
     event.preventDefault();
@@ -68,7 +91,7 @@ export default function Workspace() {
       const response = await fetch("/api/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goal: goal.trim(), max_workers: workers, timeout_seconds: 600, model_budget_cents: budget }),
+        body: JSON.stringify({ goal: goal.trim(), max_workers: workers, timeout_seconds: 600, model_budget_cents: budget, constraints }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(errorMessage(data));
@@ -76,6 +99,7 @@ export default function Workspace() {
       // updater uses the latest React state, then keeps the newest 25 entries.
       setRuns(previous => [data, ...previous].slice(0, 25));
       setGoal("");
+      setConstraints("");
       setNotice("Draft saved. No agents have started and no model costs were incurred.");
     } catch (error) {
       setError(error instanceof Error ? error.message : "Unable to save draft.");
@@ -102,6 +126,9 @@ export default function Workspace() {
             <form onSubmit={createRun}>
               <label id="brief-label" htmlFor="goal">Your task</label>
               <textarea id="goal" required minLength={10} maxLength={4000} value={goal} onChange={event => setGoal(event.target.value)} placeholder="Plan, compare, research, or put something together…" />
+              {/* Optional. A blank value is sent as "" and the API stores it as null. */}
+              <label htmlFor="constraints">Constraints <small>(optional)</small></label>
+              <textarea id="constraints" maxLength={1000} value={constraints} onChange={event => setConstraints(event.target.value)} placeholder="Budget, dates, must-haves, things to avoid…" />
               <div className="composer-bottom">
                 <div className="controls">
                   <label>Workers <select value={workers} onChange={event => setWorkers(Number(event.target.value))}><option value={1}>1 worker</option><option value={2}>2 workers</option><option value={3}>3 workers</option></select></label>
@@ -121,8 +148,8 @@ export default function Workspace() {
           <div role="status" aria-live="polite">{notice && <p className="success">{notice}</p>}</div>
 
           <section className="drafts" aria-labelledby="drafts-heading">
-            <div className="section-heading"><h2 id="drafts-heading">Recent drafts <span>{runs.length}</span></h2><button className="refresh" type="button" disabled={loading} onClick={() => void loadRuns()}>{loading ? "Loading…" : "Refresh"}</button></div>
-            {loading ? <div className="empty">Loading your saved briefs…</div> : runs.length === 0 ? <div className="empty"><div className="empty-symbol" aria-hidden="true">⌁</div><h3>Your first task starts here.</h3><p>Save a brief above. It will stay here when you come back.</p></div> : <div className="run-list">{runs.map(run => <article className="run" key={run.id}><div className="run-symbol" aria-hidden="true">↗</div><div className="run-main"><h3>{run.goal}</h3><p>{run.max_workers} {run.max_workers === 1 ? "worker" : "workers"} <span>·</span> ${(run.model_budget_cents / 100).toFixed(2)} model budget <span>·</span> {run.timeout_seconds / 60} min</p></div><span className="draft-badge">Draft</span></article>)}</div>}
+            <div className="section-heading"><h2 id="drafts-heading">Recent drafts <span>{runs.length}</span></h2><button className="refresh" type="button" disabled={loading || deleting !== null} onClick={() => void loadRuns()}>{loading ? "Loading…" : "Refresh"}</button></div>
+            {loading ? <div className="empty">Loading your saved briefs…</div> : runs.length === 0 ? <div className="empty"><div className="empty-symbol" aria-hidden="true">⌁</div><h3>Your first task starts here.</h3><p>Save a brief above. It will stay here when you come back.</p></div> : <div className="run-list">{runs.map(run => <article className="run" key={run.id}><div className="run-symbol" aria-hidden="true">↗</div><div className="run-main"><h3>{run.goal}</h3>{run.constraints && <p>Constraints: {run.constraints}</p>}<p>{run.max_workers} {run.max_workers === 1 ? "worker" : "workers"} <span>·</span> ${(run.model_budget_cents / 100).toFixed(2)} model budget <span>·</span> {run.timeout_seconds / 60} min</p></div><span className="draft-badge">Draft</span><button className="delete-draft" type="button" disabled={deleting !== null} aria-label={`Delete draft: ${run.goal}`} onClick={() => void deleteRun(run)}>{deleting === run.id ? "Deleting…" : "Delete"}</button></article>)}</div>}
           </section>
           <footer>Built for thoughtful delegation. <span>Research & artifacts · Execution not connected</span></footer>
         </div>

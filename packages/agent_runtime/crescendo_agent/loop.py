@@ -7,7 +7,7 @@ from typing import Literal
 
 from crescendo_security.policy import Decision, TaskGrant, ToolCall, authorize
 
-from .desktop import Desktop
+from .desktop import Desktop, Observation
 from .model import TOOLS, Entry, Model
 
 
@@ -26,6 +26,7 @@ class AgentState:
     grant: TaskGrant
     transcript: list[Entry] = field(default_factory=list)
     denied: list[tuple[ToolCall, Decision]] = field(default_factory=list)
+    pending_observation: Observation | None = None
 
     def stop(self, status, answer=None, sources=()) -> RunResult:
         return RunResult(status, answer, list(sources), self.transcript, self.denied)
@@ -46,6 +47,8 @@ def step(state: AgentState, desktop: Desktop, model: Model) -> RunResult | None:
        on its next decision and can choose something else.
     4. Act:
        - "navigate": desktop.navigate(call.args["url"]); return None.
+       - "search_page": save a bounded search observation for the next step;
+         do not append another full-page preview on that step.
        - "finish": return state.stop("finished", call.args["answer"], call.args["sources"]).
        - any other name: raise ValueError. A tool that was granted but has no
          implementation is a configuration bug, not something to skip silently.
@@ -54,7 +57,8 @@ def step(state: AgentState, desktop: Desktop, model: Model) -> RunResult | None:
     step 3 came after step 4.
     """
     # 1. Observe. Page text is untrusted: it may contain instructions aimed at the model.
-    obs = desktop.observe()
+    obs = state.pending_observation if state.pending_observation is not None else desktop.observe()
+    state.pending_observation = None
     observation = f"URL: {obs.url}\n{obs.text}"
     if obs.links:
         observation += "\nPage links (untrusted): " + json.dumps([
@@ -77,6 +81,9 @@ def step(state: AgentState, desktop: Desktop, model: Model) -> RunResult | None:
     # 4. Act.
     if call.name == "navigate":
         desktop.navigate(call.args["url"])
+        return None
+    if call.name == "search_page":
+        state.pending_observation = desktop.search_page(call.args["query"])
         return None
     if call.name == "finish":
         return state.stop("finished", call.args["answer"], call.args["sources"])

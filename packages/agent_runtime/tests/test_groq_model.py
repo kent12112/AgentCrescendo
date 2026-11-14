@@ -100,6 +100,21 @@ def test_malformed_json_is_rejected():
         GroqModel(client=client).decide([], TOOLS)
 
 
+def test_search_page_response_is_parsed():
+    client = Mock()
+    client.chat.completions.create.return_value = response("search_page", {"query": "population 2020"})
+    assert GroqModel(client=client).decide([], TOOLS) == ToolCall("search_page", {"query": "population 2020"})
+
+
+@pytest.mark.parametrize("args", [{}, {"query": " "}, {"query": 42}, {"query": "x" * 201},
+                                  {"query": "2020", "url": "https://evil.example/"}])
+def test_invalid_search_page_arguments_are_rejected(args):
+    client = Mock()
+    client.chat.completions.create.return_value = response("search_page", args)
+    with pytest.raises(GroqResponseError):
+        GroqModel(client=client).decide([], TOOLS)
+
+
 def test_backend_proposal_never_executes_and_denial_reaches_next_request():
     wiki = "https://en.wikipedia.org/"
     client = Mock()

@@ -2,9 +2,9 @@ from secrets import compare_digest
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from .config import get_settings
@@ -82,4 +82,17 @@ def get_run(run_id: UUID, session: SessionDep):
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
     return run
+
+
+@app.delete("/runs/{run_id}", status_code=204, dependencies=[Depends(require_local_token)])
+def delete_run(run_id: UUID, session: SessionDep):
+    # Delete only the requested draft. A single statement avoids a gap between
+    # checking existence and deleting; RETURNING tells us whether a row matched.
+    deleted_id = session.execute(
+        delete(Run).where(Run.id == str(run_id), Run.status == "draft").returning(Run.id)
+    ).scalar_one_or_none()
+    if deleted_id is None:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    session.commit()
+    return Response(status_code=204)
 

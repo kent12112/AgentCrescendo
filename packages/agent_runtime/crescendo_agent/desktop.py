@@ -7,6 +7,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
+from .page_search import search_passages
+
 
 @dataclass(frozen=True)
 class PageLink:
@@ -24,6 +26,7 @@ class Observation:
 class Desktop(Protocol):
     def observe(self) -> Observation: ...
     def navigate(self, url: str) -> None: ...
+    def search_page(self, query: str) -> Observation: ...
 
 
 class FakeDesktop:
@@ -45,3 +48,8 @@ class FakeDesktop:
     def navigate(self, url: str) -> None:
         self.visited.append(url)
         self.url = url
+
+    def search_page(self, query: str) -> Observation:
+        if self.url is None:
+            return Observation(None, "No page is open. Navigate to a permitted source first.")
+        return Observation(self.url, search_passages(self.pages.get(self.url, "404 Not Found"), query))

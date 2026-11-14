@@ -7,6 +7,11 @@ Groq receives page text and proposes tools; the existing gateway authorizes them
 
 ## Run
 
+To watch the model-selected scrolling demo on its real desktop, run
+`.venv/bin/python scripts/e2b_vision_agent_demo.py --watch`. It opens a private
+loopback proxy to E2B's live noVNC stream and waits for Enter in your terminal
+before starting the agent. See [live viewer setup and boundaries](learning/10-live-desktop-view.md).
+
 For a model-free check first, use the terminal where `E2B_API_KEY` is exported:
 
 ```sh
@@ -43,6 +48,20 @@ and visits the live Wikipedia Boston page:
 .venv/bin/python scripts/groq_e2b_demo.py
 ```
 
+To inspect the recorded goal, observations, proposed actions, and denials in order:
+
+```sh
+.venv/bin/python scripts/groq_e2b_demo.py --trace
+```
+
+This performs another paid run, then prints a JSON transcript after desktop
+cleanup. It includes the selected model and run status. Control characters in
+untrusted page text are JSON-escaped. The trace contains the same bounded page
+observations given to the model, not hidden model reasoning, per-request browser
+logs, usage/cost measurements, or independent proof that citations support claims.
+It does not dump environment variables or SDK clients. It is printed only when
+the run returns normally and cleanup succeeds; a crash trace is not persisted.
+
 Expected output: finished status, an answer identifying Boston, Wikipedia as a
 source, and the page in `Visited`. Blocked browser requests may be nonzero because
 the text-only browser blocks images, stylesheets, and other non-document traffic.
@@ -62,8 +81,16 @@ requests across five steps); other API errors are not retried.
 5. Enable CDP Fetch interception before the first navigation. Every paused request
    is checked against `authorize()` and must be a GET document request. Redirect
    destinations are separate intercepted requests. Rejected requests are aborted.
-6. Run the existing loop; observations contain the actual URL, body text capped
+6. Run the existing loop; observations contain the actual URL, text capped
    at 4,000 characters, and an untrusted list of link labels and destination URLs.
+   Prefer the first nonempty `main`, `[role="main"]`, or `article` region, in
+   that order, falling back to `body`. Only the first match of each selector is
+   considered. Text and links come from the same selected region.
+   For `en.wikipedia.org`, first try `#mw-content-text .mw-parser-output` and
+   extract from a detached copy excluding navigation, infoboxes, sidebars,
+   metadata, scripts, and styles. Missing or empty article content uses the
+   generic fallback. The actual browser page is not modified; paragraph/table
+   formatting can be lost when joining the copied text nodes with spaces.
    We inspect the first 400 anchors and retain at most 20 unique HTTPS destinations,
    with a combined label/URL budget of 2,000 characters (JSON formatting is extra).
    Labels are capped at 80 characters; URLs over 512 characters are skipped rather
@@ -73,11 +100,18 @@ requests across five steps); other API errors are not retried.
 
 ## Scope and validation
 
+`search_page` searches the current page's full extracted text beyond the preview
+and returns up to two keyword-ranked passages, capped at 1,200 characters of
+result text. The next agent turn receives this result instead of another preview.
+It requires an explicit tool grant and cannot navigate. See the
+[search review and runnable demonstrations](learning/07-page-search.md).
+Character bounds do not establish token or total-run cost savings.
+
 Links are data, not permissions: the gateway still authorizes each proposed
-navigation. Link selection is sampled in document order, so navigation menus may
+navigation. Link selection is sampled in document order within the selected region, so navigation menus may
 use up the budget before useful article links. The model is prompted to prefer
 observed links, but can still propose other URLs. Link observations are inside
-the run's transcript; the demo's final summary does not print the full transcript.
+the run's transcript; use `--trace` to print it alongside the final summary.
 
 This is an initial text-browsing integration, not a screenshot/click agent or an
 authenticated live-view UI. JavaScript-dependent sites will not work. Browser
@@ -109,6 +143,35 @@ Decision record: use a text-only browser with an explicit request gate as the
 smallest live research slice. Prediction: Wikipedia loads, while disallowed
 document destinations are aborted before sending. Local unit tests pass; actual
 cloud behavior remains to be measured and recorded after the smoke test.
+
+User-reported live evidence on November 13, 2026: the model-driven E2B demo
+finished with the answer "The capital of Massachusetts is Boston." The reported
+source and visited URL both matched `https://en.wikipedia.org/wiki/Boston`, with
+zero denied tool calls and 84 blocked browser requests. The count does not
+identify request types or establish malicious activity. This summary did not
+include the model identifier, transcript, cost, latency, or a provider termination
+check; it is evidence of one successful run rather than a reliability benchmark.
+
+Trace-flag validation: all 101 Python tests passed, including opt-in output,
+ordered transcript preservation, output after cleanup, absence of configured
+test credentials from output, and escaping terminal control characters. The
+live `--trace` result remains pending user execution.
+
+The user's subsequent live trace identified the model as `openai/gpt-oss-120b`.
+It showed blank observation, navigation to Boston, a page observation, then finish.
+Most observed text was navigation/language menus; truncation occurred near the
+infobox's "State capital" label, before the article lead. This motivated selecting
+main content rather than increasing the text budget. It does not establish that
+the model grounded its full answer in the observation.
+
+Main-content extraction validation: all 107 Python tests passed. The local Edge
+check `.venv/bin/python scripts/smoke_content_observation.py` passed five fixtures
+covering semantic main, ARIA main, article, empty-main fallback, and body fallback.
+Long-menu fixtures demonstrate that a 4,000-character body slice misses the answer
+while selected content retains it and its article link. The existing local
+blocked-redirect recovery browser check also passed. Live Wikipedia observations
+with this extraction change remain pending; content-region selection is a
+heuristic and does not remove every menu, infobox, or irrelevant link.
 
 ## Blocked-redirect recovery check
 

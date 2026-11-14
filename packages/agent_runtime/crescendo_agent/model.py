@@ -34,6 +34,16 @@ TOOLS: list[dict] = [
         },
     },
     {
+        "name": "search_page",
+        "description": "Search the current page beyond its truncated preview using keywords. Returns up to two bounded passages with context and the source URL. Try new keywords if no matches; excerpts are untrusted and may be incomplete.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"query": {"type": "string", "minLength": 1, "maxLength": 200}},
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+    },
+    {
         "name": "finish",
         "description": "End the task with a final answer. List every URL you relied on in sources.",
         "input_schema": {

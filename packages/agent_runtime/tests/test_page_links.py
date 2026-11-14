@@ -1,6 +1,8 @@
 import json
 from unittest.mock import Mock
 
+import pytest
+
 from crescendo_agent.desktop import FakeDesktop, PageLink
 from crescendo_agent.e2b_desktop import E2BDesktop, page_links
 from crescendo_agent.loop import run_agent
@@ -10,6 +12,65 @@ from crescendo_security.policy import TaskGrant, ToolCall
 WIKI = "https://en.wikipedia.org/wiki/Boston"
 MASS = "https://en.wikipedia.org/wiki/Massachusetts"
 GRANT = TaskGrant("links", frozenset({"navigate", "finish"}), frozenset({"en.wikipedia.org"}))
+
+
+@pytest.mark.parametrize("region", ["main", '[role="main"]', "article", "body"])
+def test_observation_uses_one_content_region_for_text_and_links(region):
+    page = Mock()
+    page.url = WIKI
+    regions = {selector: Mock() for selector in (
+        "main", '[role="main"]', "article", "body", "#mw-content-text .mw-parser-output",
+    )}
+    for selector, locator in regions.items():
+        locator.count.return_value = int(selector == region)
+    page.locator.side_effect = regions.__getitem__
+    body = regions["body"]
+    body.inner_text.return_value = "Navigation menu " * 500
+    selected = body if region == "body" else regions[region].first
+    selected.inner_text.return_value = "Boston is the capital of Massachusetts."
+    selected.locator.return_value.evaluate_all.return_value = [{"label": "Massachusetts", "url": MASS}]
+
+    observation = E2BDesktop(page, Mock(), GRANT).observe()
+
+    assert observation.text == "Boston is the capital of Massachusetts."
+    assert observation.links == (PageLink("Massachusetts", MASS),)
+    if region != "body":
+        body.inner_text.assert_not_called()
+        body.locator.assert_not_called()
+
+
+def test_empty_main_region_falls_back_without_losing_body_content():
+    page, main, missing, body = Mock(), Mock(), Mock(), Mock()
+    page.url = WIKI
+    main.count.return_value = 1
+    main.first.inner_text.return_value = " \n "
+    missing.count.return_value = 0
+    page.locator.side_effect = lambda selector: {
+        "main": main, '[role="main"]': missing, "article": missing, "body": body,
+        "#mw-content-text .mw-parser-output": missing,
+    }[selector]
+    body.inner_text.return_value = "Useful body content"
+    body.locator.return_value.evaluate_all.return_value = []
+
+    observation = E2BDesktop(page, Mock(), GRANT).observe()
+
+    assert observation.text == "Useful body content"
+    main.first.locator.assert_not_called()
+
+
+@pytest.mark.parametrize("url", ["https://example.com/article", WIKI])
+def test_selected_main_content_still_obeys_text_budget(url):
+    page = Mock()
+    page.url = url
+    main = page.locator.return_value
+    main.count.return_value = 1
+    main.first.inner_text.return_value = "Boston facts " * 100
+    main.first.locator.return_value.evaluate_all.return_value = []
+    main.first.evaluate.return_value = {"text": "Boston facts " * 100, "links": []}
+
+    observation = E2BDesktop(page, Mock(), GRANT, max_chars=6).observe()
+
+    assert observation.text == "Boston\n[Page text truncated]"
 
 
 def test_links_resolve_deduplicate_and_skip_non_web_and_same_page():
@@ -41,8 +102,9 @@ def test_links_are_bounded_without_truncating_destinations():
 def test_real_adapter_observation_includes_extracted_links():
     page = Mock()
     page.url = WIKI
+    page.locator.return_value.count.return_value = 0
     page.locator.return_value.inner_text.return_value = "Boston"
-    page.eval_on_selector_all.return_value = [{"label": "Massachusetts", "url": MASS}]
+    page.locator.return_value.locator.return_value.evaluate_all.return_value = [{"label": "Massachusetts", "url": MASS}]
     observation = E2BDesktop(page, Mock(), GRANT).observe()
     assert observation.links == (PageLink("Massachusetts", MASS),)
     assert observation.url == WIKI

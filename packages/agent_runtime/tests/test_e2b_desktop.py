@@ -34,8 +34,9 @@ def test_blocked_redirect_becomes_observation_and_agent_chooses_another_source()
         page.url = second
 
     page.goto.side_effect = goto
+    page.locator.return_value.count.return_value = 0
     page.locator.return_value.inner_text.return_value = "Boston facts"
-    page.eval_on_selector_all.return_value = []
+    page.locator.return_value.locator.return_value.evaluate_all.return_value = []
     model = ScriptedModel([
         ToolCall("navigate", {"url": first}),
         ToolCall("navigate", {"url": second}),
@@ -141,6 +142,46 @@ def test_readiness_disconnect_reports_browser_and_relay_logs(monkeypatch):
     assert "relay: startup diagnostic" in str(error.value)
 
 
+def test_browser_startup_waits_for_direct_debugger_after_slow_launch(monkeypatch):
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/chromium")
+    child = Mock()
+    child.poll.return_value = None
+    monkeypatch.setattr("subprocess.Popen", Mock(return_value=child))
+    monkeypatch.setattr("builtins.open", mock_open())
+    opener = Mock()
+    response = Mock()
+    response.__enter__ = Mock(return_value=response)
+    response.__exit__ = Mock(return_value=False)
+    opener.open.side_effect = [ConnectionRefusedError("starting"), ConnectionRefusedError("still starting"), response]
+    monkeypatch.setattr("urllib.request.build_opener", lambda *args: opener)
+    seconds = iter([0, 1, 30])
+    monkeypatch.setattr("time.monotonic", lambda: next(seconds))
+    monkeypatch.setattr("time.sleep", lambda seconds: None)
+
+    exec(compile(START_BROWSER, "<browser-startup>", "exec"), {})
+
+    assert opener.open.call_count == 3
+    opener.open.assert_called_with("http://127.0.0.1:9222/json/version", timeout=1)
+
+
+def test_browser_startup_timeout_reports_direct_port_and_log(monkeypatch):
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/chromium")
+    child = Mock()
+    child.poll.return_value = None
+    monkeypatch.setattr("subprocess.Popen", Mock(return_value=child))
+    monkeypatch.setattr("builtins.open", mock_open())
+    monkeypatch.setattr("pathlib.Path.read_text", lambda *args, **kwargs: "browser startup diagnostic")
+    opener = Mock()
+    opener.open.side_effect = ConnectionRefusedError("not listening")
+    monkeypatch.setattr("urllib.request.build_opener", lambda *args: opener)
+    seconds = iter([0, 46])
+    monkeypatch.setattr("time.monotonic", lambda: next(seconds))
+
+    with pytest.raises(RuntimeError, match="port 9222") as error:
+        exec(compile(START_BROWSER, "<browser-startup>", "exec"), {})
+    assert "browser startup diagnostic" in str(error.value)
+
+
 @pytest.mark.parametrize("url,kind,method,allowed", [
     ("https://en.wikipedia.org/wiki/Boston", "Document", "GET", True),
     ("https://127.0.0.1:8000/runs", "Document", "GET", False),
@@ -186,8 +227,9 @@ def test_navigation_and_observation_are_bounded():
     page.goto.assert_not_called()
     page.url = "https://en.wikipedia.org/wiki/Boston"
     desktop.navigate(page.url)
+    page.locator.return_value.count.return_value = 0
     page.locator.return_value.inner_text.return_value = "Boston is the capital"
-    page.eval_on_selector_all.return_value = []
+    page.locator.return_value.locator.return_value.evaluate_all.return_value = []
     assert desktop.observe().text == "Bosto\n[Page text truncated]"
     assert desktop.visited == [page.url]
 
@@ -222,7 +264,9 @@ def test_body_failure_closes_browser_and_sandbox(monkeypatch):
     playwright_factory.return_value = manager
     browser = playwright.chromium.connect_over_cdp.return_value
     with pytest.raises(RuntimeError, match="model failed"):
-        with open_e2b_desktop(GRANT, sandbox_type=factory, playwright_factory=playwright_factory):
+        with open_e2b_desktop(GRANT, sandbox_type=factory, playwright_factory=playwright_factory) as desktop:
+            desktop._screenshot_provider()
+            sandbox.screenshot.assert_called_once_with(format="bytes")
             raise RuntimeError("model failed")
     browser.close.assert_called_once_with()
     sandbox.kill.assert_called_once_with()

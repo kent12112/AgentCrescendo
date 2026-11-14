@@ -53,6 +53,10 @@ Backend tests use temporary SQLite databases so protocol validation and migratio
 
 Draft limits: 1–3 workers, 30–600 seconds, and a model budget of 1–500 US cents. These are validated configuration values, not active execution controls yet. Unknown request fields are rejected. The API only creates `draft` runs and reports execution as unavailable. Retention is not automated in this slice; development drafts remain until deleted from the database.
 
+Saved drafts can be deleted using the dashboard's Delete button, which asks for confirmation, or through the authenticated `DELETE /runs/{run_id}` API in FastAPI's `/docs`. Success returns `204` with an empty body; a missing draft returns `404`, including a repeated deletion. See the [draft deletion review exercise](docs/learning/03-delete-draft.md).
+
+For the optional browser smoke test, start both local servers and PostgreSQL, install the project's Playwright extra and Microsoft Edge, then run `.venv/bin/python scripts/smoke_dashboard_deletion.py` from the repository root. It creates and cleans up one temporary draft while checking cancellation, proxy validation, failed deletion, and deletion surviving reload.
+
 To stop the database without deleting saved drafts:
 
 ```bash

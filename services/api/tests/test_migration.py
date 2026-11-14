@@ -17,7 +17,7 @@ def test_initial_migration_can_upgrade_and_downgrade(tmp_path, monkeypatch):
     try:
         command.upgrade(config, "head")
         assert "runs" in inspect(engine).get_table_names()
-        assert len(inspect(engine).get_check_constraints("runs")) == 4
+        assert len(inspect(engine).get_check_constraints("runs")) == 5
         # Compare the migrated schema with ORM metadata to detect schema drift.
         command.check(config)
         # Exercise reversal only against this disposable test database.
