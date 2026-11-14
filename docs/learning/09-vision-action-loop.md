@@ -71,3 +71,36 @@ No automatic sandbox recreation or paid retries were added. All 181 Python tests
 passed, including a simulated 30-second launch and a direct-debugger timeout.
 This improves readiness handling and diagnosis; the underlying live startup cause
 and the model-controlled scroll result remain unverified pending a retry.
+
+Live model-selected result (November 13, 2026, run by Claude in the VS Code
+session): `scripts/e2b_vision_agent_demo.py --save-screenshots` with
+`qwen/qwen3.8-27b` passed in about 27 seconds of wall time. The model saw step 1
+(only top code `F14ACE` visible), proposed `scroll(down, 5)` on its own, saw step
+2 (`After scrolling`, target `C5BC0B`), and finished with `C5BC0B`. No denials.
+Both saved PNGs were inspected and match the trace, so the answer is supported
+by the image actually supplied, not the distractor. `--save-screenshots` now also
+writes `result.json` (answer, both expected codes, trace) beside the PNGs, pass or
+fail. Live scripts load keys from the git-ignored `.env` via
+`crescendo_agent.local_env` (shell exports win; skipped under pytest).
+
+Limits: one run on a controlled two-section fixture; a single maximum-size scroll
+happened to land on the target. This does not measure repeat reliability, token
+usage or cost, multi-step scrolling, or public pages. The earlier reported wrong
+answer (`.demo-artifacts/vision-9e57…`, whose PNGs show correct observation) had
+no saved answer, so its cause remains unknown. Provider termination was not
+independently checked.
+
+Scroll pointer fix (November 13, 2026): `E2BDesktop.scroll()` called Playwright's
+`page.mouse.move(200, 200)` and then E2B's `sandbox.scroll`. They are different
+mice. Playwright sends synthetic events inside Chrome; E2B runs
+`xdotool click --repeat N 5`, which turns the wheel at the real X pointer. A live
+probe on one desktop (no model calls) showed: real pointer (512, 384) before and
+after `page.mouse.move`; wheel with the pointer over the taskbar left `scrollY` at
+0; wheel with the pointer at (208, 322) over the page scrolled 360 px. Earlier runs
+worked only because the pointer starts at the screen centre, which is over the
+page. `scroll()` now moves the real pointer with `sandbox.move_mouse` to
+`SCROLL_POINTER = (512, 440)` (middle of the page area on the 1024x768 display)
+and refuses to scroll if no pointer function is configured. A repeat live F07
+run passed (`E1B374`) with the pointer visible at about (512, 440) in step 2.
+The point is fixed for this display and single-window layout; it is not a
+general window-focus policy.

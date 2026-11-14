@@ -6,7 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from crescendo_agent.e2b_desktop import E2BDesktop
+from crescendo_agent.e2b_desktop import SCROLL_POINTER, E2BDesktop
 from crescendo_security.policy import TaskGrant, ToolCall, authorize
 
 GRANT = TaskGrant("scroll", frozenset({"scroll", "screenshot"}), frozenset())
@@ -23,34 +23,51 @@ def test_scroll_arguments_fail_closed(args):
 
 
 def test_scroll_requires_explicit_grant():
-    page, provider = Mock(), Mock()
-    desktop = E2BDesktop(page, Mock(), TaskGrant("no-scroll", frozenset(), frozenset()), scroll_provider=provider)
+    page, provider, pointer = Mock(), Mock(), Mock()
+    desktop = E2BDesktop(page, Mock(), TaskGrant("no-scroll", frozenset(), frozenset()),
+                         scroll_provider=provider, pointer_provider=pointer)
     with pytest.raises(ValueError, match="not permitted"):
         desktop.scroll("down", 1)
     provider.assert_not_called()
+    pointer.assert_not_called()
     page.bring_to_front.assert_not_called()
-    page.mouse.move.assert_not_called()
 
 
 @pytest.mark.parametrize("direction,amount", [("up", 1), ("down", 5)])
-def test_authorized_scroll_targets_content_and_calls_provider_once(direction, amount):
-    page = Mock()
+def test_authorized_scroll_moves_real_pointer_before_wheel(direction, amount):
+    page, pointer = Mock(), Mock()
     def provider(**kwargs):
         page.bring_to_front.assert_called_once_with()
-        page.mouse.move.assert_called_once_with(200, 200)
+        # The real desktop pointer, not Playwright's synthetic mouse, must be placed first.
+        pointer.assert_called_once_with(*SCROLL_POINTER)
         assert kwargs == {"direction": direction, "amount": amount}
     wrapped = Mock(side_effect=provider)
-    desktop = E2BDesktop(page, Mock(), GRANT, scroll_provider=wrapped)
+    desktop = E2BDesktop(page, Mock(), GRANT, scroll_provider=wrapped, pointer_provider=pointer)
     desktop.scroll(direction, amount)
     wrapped.assert_called_once_with(direction=direction, amount=amount)
+    page.mouse.move.assert_not_called()
+
+
+def test_scroll_point_is_inside_page_area_of_e2b_display():
+    x, y = SCROLL_POINTER
+    assert 0 < x < 1024 and 114 < y < 768
+
+
+def test_scroll_without_pointer_provider_fails_closed():
+    provider = Mock()
+    desktop = E2BDesktop(Mock(), Mock(), GRANT, scroll_provider=provider)
+    with pytest.raises(RuntimeError, match="pointer"):
+        desktop.scroll("down", 1)
+    provider.assert_not_called()
 
 
 def test_invalid_scroll_never_reaches_provider():
-    provider = Mock()
-    desktop = E2BDesktop(Mock(), Mock(), GRANT, scroll_provider=provider)
+    provider, pointer = Mock(), Mock()
+    desktop = E2BDesktop(Mock(), Mock(), GRANT, scroll_provider=provider, pointer_provider=pointer)
     with pytest.raises(ValueError, match="1 to 5"):
         desktop.scroll("down", 100)
     provider.assert_not_called()
+    pointer.assert_not_called()
 
 
 @pytest.mark.parametrize("second_call_fails", [False, True])

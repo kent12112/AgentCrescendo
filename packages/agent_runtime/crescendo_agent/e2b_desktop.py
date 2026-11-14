@@ -157,14 +157,22 @@ WIKIPEDIA_CONTENT = """root => {
 }"""
 
 
+# Real desktop (screen) coordinates for wheel scrolling: the middle of Chrome's page
+# area on E2B's 1024x768 display (content spans roughly y=114..768). E2B's scroll
+# turns the wheel wherever the real X pointer is; Playwright's page.mouse is
+# synthetic and does not move that pointer (live-checked November 13, 2026).
+SCROLL_POINTER = (512, 440)
+
+
 class E2BDesktop:
-    def __init__(self, page: Any, session: Any, grant: TaskGrant, *, max_chars=4000, screenshot_provider=None, scroll_provider=None, viewer_provider=None):
+    def __init__(self, page: Any, session: Any, grant: TaskGrant, *, max_chars=4000, screenshot_provider=None, scroll_provider=None, pointer_provider=None, viewer_provider=None):
         self.page = page
         self.session = session
         self.grant = grant
         self.max_chars = max_chars
         self._screenshot_provider = screenshot_provider
         self._scroll_provider = scroll_provider
+        self._pointer_provider = pointer_provider
         self._viewer_provider = viewer_provider
         self.visited: list[str] = []
         self.blocked_requests: list[str] = []
@@ -196,13 +204,14 @@ class E2BDesktop:
         decision = authorize(self.grant, ToolCall("scroll", {"direction": direction, "amount": amount}))
         if not decision.allowed:
             raise ValueError(decision.reason)
-        if self._scroll_provider is None:
-            raise RuntimeError("Desktop scroll provider is not configured.")
+        if self._scroll_provider is None or self._pointer_provider is None:
+            raise RuntimeError("Desktop scroll and pointer providers are not configured.")
         self.page.bring_to_front()
-        # Place the pointer within browser content so wheel events target the page,
-        # rather than a desktop panel or another window. This is a fixed fixture
-        # position, not a general multi-window focus policy.
-        self.page.mouse.move(200, 200)
+        # Move the REAL desktop pointer over page content first, so the wheel
+        # targets the page rather than a panel or another window. A live probe
+        # showed the wheel over the taskbar does not scroll the page. This is a
+        # fixed position, not a general multi-window focus policy.
+        self._pointer_provider(*SCROLL_POINTER)
         self._scroll_provider(direction=direction, amount=amount)
 
     def live_view(self):
@@ -353,6 +362,7 @@ def open_e2b_desktop(grant: TaskGrant, *, sandbox_type=None, playwright_factory=
                 desktop = E2BDesktop(page, context.new_cdp_session(page), grant,
                                      screenshot_provider=lambda: sandbox.screenshot(format="bytes"),
                                      scroll_provider=sandbox.scroll,
+                                     pointer_provider=sandbox.move_mouse,
                                      viewer_provider=lambda: _open_live_view(sandbox))
                 yield desktop
             finally:
