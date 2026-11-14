@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 
+from crescendo_agent.local_env import load_local_env
 from crescendo_agent.e2b_desktop import open_e2b_desktop
 from crescendo_agent.groq_model import GroqModel
 from crescendo_agent.loop import run_agent
@@ -10,6 +11,7 @@ from crescendo_security.policy import TaskGrant
 
 
 def main():
+    load_local_env()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--trace", action="store_true", help="Print the recorded transcript after desktop cleanup.")
     parser.add_argument("--question", default="tell me the capital of Massachusetts",

@@ -2,10 +2,12 @@
 import json
 import os
 
+from crescendo_agent.local_env import load_local_env
 from crescendo_agent.e2b_preflight import run_preflight
 
 
 def main():
+    load_local_env()
     if not os.environ.get("E2B_API_KEY"):
         raise SystemExit("Set E2B_API_KEY in your shell first. This check uses E2B resources.")
     results = run_preflight()

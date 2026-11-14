@@ -3,12 +3,14 @@ import argparse
 import os
 from secrets import token_hex
 
+from crescendo_agent.local_env import load_local_env
 from crescendo_agent.e2b_desktop import open_e2b_desktop
 from crescendo_agent.vision import GroqVision
 from crescendo_security.policy import TaskGrant
 
 
 def main():
+    load_local_env()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", default=os.environ.get("GROQ_VISION_MODEL", "qwen/qwen3.8-27b"))
     parser.add_argument("--scroll", action="store_true", help="Read a second visual code after one bounded scroll (two model calls).")

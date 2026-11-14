@@ -11,6 +11,7 @@ import webbrowser
 from uuid import uuid4
 from secrets import token_hex
 
+from crescendo_agent.local_env import load_local_env
 from crescendo_agent.e2b_desktop import open_e2b_desktop
 from crescendo_agent.vision import GroqVision
 from crescendo_agent.vision_loop import run_vision_agent
@@ -34,6 +35,7 @@ def validate_code_answer(answer):
 
 
 def main():
+    load_local_env()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", default=os.environ.get("GROQ_VISION_MODEL", "qwen/qwen3.8-27b"))
     parser.add_argument("--watch", action="store_true", help="Open the real desktop in a local live viewer before starting.")
@@ -84,7 +86,15 @@ def main():
     print("Answer:", result.answer)
     print("Expected target code:", target_code)
     print("Denied proposals:", len(result.denied))
-    print("Trace:", json.dumps([{"kind": e.kind, "text": e.text} for e in result.transcript], indent=2))
+    trace = [{"kind": e.kind, "text": e.text} for e in result.transcript]
+    print("Trace:", json.dumps(trace, indent=2))
+    if args.save_screenshots:
+        # Keep the outcome beside the exact images the model saw, pass or fail.
+        record = {"model": model.model, "status": result.status, "answer": result.answer,
+                  "expected_target": target_code, "expected_top": top_code,
+                  "denied": len(result.denied), "trace": trace}
+        (directory / "result.json").write_text(json.dumps(record, indent=2) + "\n")
+        print("Saved result:", (directory / "result.json").resolve())
     if result.status != "finished" or target_code != (result.answer or "").strip().upper():
         raise SystemExit("FAIL: agent did not finish with the target code.")
     print("PASS: agent finished with the target code supplied only through screenshots")
