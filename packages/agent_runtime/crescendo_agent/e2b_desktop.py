@@ -163,6 +163,9 @@ WIKIPEDIA_CONTENT = """root => {
 # synthetic and does not move that pointer (live-checked November 13, 2026).
 SCROLL_POINTER = (512, 440)
 
+# Chrome resource types the request filter may continue (permitted hosts, GET only).
+ALLOWED_RESOURCE_TYPES = frozenset({"Document", "Stylesheet"})
+
 
 class E2BDesktop:
     def __init__(self, page: Any, session: Any, grant: TaskGrant, *, max_chars=4000, screenshot_provider=None, scroll_provider=None, pointer_provider=None, viewer_provider=None):
@@ -229,8 +232,11 @@ class E2BDesktop:
             allowed = authorize(self.grant, ToolCall("navigate", {"url": url})).allowed
         except ValueError:
             allowed = False
-        # No scripts, images, styles, downloads, or non-GET requests in this slice.
-        if allowed and request["method"] == "GET" and event["resourceType"] == "Document":
+        # Pages and their stylesheets only, and only from permitted hosts: no
+        # scripts, images, fonts, downloads, or non-GET requests. Stylesheets let
+        # the vision model see the page laid out as a person would; any further
+        # requests a stylesheet makes are paused and checked here as well.
+        if allowed and request["method"] == "GET" and event["resourceType"] in ALLOWED_RESOURCE_TYPES:
             self.session.send("Fetch.continueRequest", {"requestId": event["requestId"]})
         else:
             self.blocked_requests.append(url)
@@ -299,7 +305,9 @@ class E2BDesktop:
             raise ValueError(decision.reason)
         self._blocked_document_frames.clear()
         try:
-            self.page.goto(url, wait_until="domcontentloaded", timeout=20000)
+            # "load" waits until stylesheets have been applied or blocked, so the
+            # next screenshot shows the drawn page rather than a blank tab.
+            self.page.goto(url, wait_until="load", timeout=20000)
         except PlaywrightError as error:
             # Only a blocked main-frame document explains a recoverable policy
             # failure. Images and iframe blocks must not hide unrelated errors.
@@ -319,17 +327,23 @@ class E2BDesktop:
 
 
 @contextmanager
-def open_e2b_desktop(grant: TaskGrant, *, sandbox_type=None, playwright_factory=None):
-    """Own the desktop lifetime, including cleanup after initialization failure."""
+def open_e2b_desktop(grant: TaskGrant, *, sandbox_type=None, playwright_factory=None, lifetime_seconds=180):
+    """Own the desktop lifetime, including cleanup after initialization failure.
+
+    `lifetime_seconds` is E2B's own kill timer: a safety net if our cleanup never
+    runs. It covers setup, any viewer wait, and the agent run.
+    """
     import httpx
 
+    if type(lifetime_seconds) is not int or not 60 <= lifetime_seconds <= 600:
+        raise ValueError("lifetime_seconds must be an integer from 60 to 600.")
     if sandbox_type is None:
         from e2b_desktop import Sandbox
         sandbox_type = Sandbox
     if playwright_factory is None:
         from playwright.sync_api import sync_playwright
         playwright_factory = sync_playwright
-    sandbox = sandbox_type.create(timeout=180, network={
+    sandbox = sandbox_type.create(timeout=lifetime_seconds, network={
         "deny_out": ["0.0.0.0/0"],
         "allow_out": sorted(grant.allowed_hosts),
         "allow_public_traffic": False,

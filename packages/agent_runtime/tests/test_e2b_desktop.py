@@ -187,7 +187,15 @@ def test_browser_startup_timeout_reports_direct_port_and_log(monkeypatch):
     ("https://127.0.0.1:8000/runs", "Document", "GET", False),
     ("http://169.254.169.254/", "Document", "GET", False),
     ("https://en.wikipedia.org@evil.com/", "Document", "GET", False),
-    ("https://en.wikipedia.org/style.css", "Stylesheet", "GET", False),
+    # Stylesheets: only GET, only from a permitted host.
+    ("https://en.wikipedia.org/w/load.php?only=styles", "Stylesheet", "GET", True),
+    ("https://evil.com/style.css", "Stylesheet", "GET", False),
+    ("https://en.wikipedia.org/w/load.php?only=styles", "Stylesheet", "POST", False),
+    # Everything else stays blocked, even from a permitted host.
+    ("https://en.wikipedia.org/w/load.php?only=scripts", "Script", "GET", False),
+    ("https://en.wikipedia.org/logo.png", "Image", "GET", False),
+    ("https://en.wikipedia.org/font.woff2", "Font", "GET", False),
+    ("https://en.wikipedia.org/api", "XHR", "GET", False),
     ("https://en.wikipedia.org/", "Document", "POST", False),
     ("https://[invalid/", "Document", "GET", False),
 ])
@@ -245,6 +253,21 @@ def test_remote_setup_failure_still_destroys_sandbox():
         "deny_out": ["0.0.0.0/0"], "allow_out": ["en.wikipedia.org"],
         "allow_public_traffic": False,
     }
+    assert factory.create.call_args.kwargs["timeout"] == 180
+
+
+def test_desktop_lifetime_is_configurable_within_bounds():
+    factory = Mock()
+    factory.create.return_value.commands.run.side_effect = RuntimeError("stop after create")
+    with pytest.raises(RuntimeError):
+        with open_e2b_desktop(GRANT, sandbox_type=factory, playwright_factory=Mock(), lifetime_seconds=300):
+            pass
+    assert factory.create.call_args.kwargs["timeout"] == 300
+    for bad in (59, 601, 300.0, True):
+        with pytest.raises(ValueError, match="lifetime_seconds"):
+            with open_e2b_desktop(GRANT, sandbox_type=factory, playwright_factory=Mock(), lifetime_seconds=bad):
+                pass
+    assert factory.create.call_count == 1
 
 
 def test_body_failure_closes_browser_and_sandbox(monkeypatch):

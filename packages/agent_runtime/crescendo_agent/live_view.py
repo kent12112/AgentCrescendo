@@ -3,7 +3,9 @@ import asyncio
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from secrets import compare_digest, token_urlsafe
+import select
 import socket
+import sys
 import threading
 import time
 from urllib.parse import urlencode, urlsplit
@@ -176,3 +178,16 @@ def open_live_view(sandbox):
         listener.close()
         if started_stream:
             sandbox.stream.stop()
+
+
+def wait_for_viewer(viewer, *, timeout=45, stream=None):
+    """Block until the viewer connects and the user presses Enter, so the agent
+    never starts before the person can see the desktop. Shared by the demos."""
+    stream = sys.stdin if stream is None else stream
+    viewer.wait_connected()
+    print("Viewer stream transport connected. Confirm that the remote desktop and page are visible.", flush=True)
+    print(f"When the desktop is visible, press Enter here to start the agent ({timeout}-second limit).", flush=True)
+    if not select.select([stream], [], [], timeout)[0]:
+        raise TimeoutError("Viewer wait expired; desktop will be cleaned up.")
+    if not stream.readline():
+        raise RuntimeError("Interactive terminal required for --watch.")

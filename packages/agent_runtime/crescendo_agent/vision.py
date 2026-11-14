@@ -2,10 +2,17 @@
 import base64
 import json
 from dataclasses import dataclass, field
+import re
 import struct
 from typing import Any
 
 from crescendo_security.policy import ToolCall
+
+MAX_REASON_CHARS = 200
+# Asked for with every action, for diagnosis and display only. It is the model's own
+# account of what it saw: untrusted, possibly wrong, never used for authorization.
+REASON = {"type": "string", "maxLength": MAX_REASON_CHARS,
+          "description": "One short sentence: what you see on the screen that justifies this action."}
 
 VISION_TOOLS = [
     {"type": "function", "function": {
@@ -13,15 +20,54 @@ VISION_TOOLS = [
         "parameters": {"type": "object", "properties": {
             "direction": {"type": "string", "enum": ["up", "down"]},
             "amount": {"type": "integer", "minimum": 1, "maximum": 5},
-        }, "required": ["direction", "amount"], "additionalProperties": False},
+            "reason": REASON,
+        }, "required": ["direction", "amount", "reason"], "additionalProperties": False},
     }},
     {"type": "function", "function": {
         "name": "finish", "description": "Finish with an answer supported by the visible screen, or honestly report failure.",
         "parameters": {"type": "object", "properties": {
             "answer": {"type": "string", "minLength": 1, "maxLength": 2000},
-        }, "required": ["answer"], "additionalProperties": False},
+            "reason": REASON,
+        }, "required": ["answer", "reason"], "additionalProperties": False},
     }},
 ]
+
+
+@dataclass(frozen=True)
+class Proposal:
+    """One model decision: the action to authorize, plus the model's stated reason."""
+
+    call: ToolCall
+    reason: str | None = None
+
+
+def clean_reason(value) -> str | None:
+    """Single line, at most MAX_REASON_CHARS; anything unusable becomes None."""
+    if not isinstance(value, str):
+        return None
+    text = " ".join(value.split())[:MAX_REASON_CHARS]
+    return text or None
+
+
+class RateLimited(Exception):
+    """The model provider asked us to wait. Carries only the delay, never provider text."""
+
+    def __init__(self, retry_after: float):
+        super().__init__(f"Model provider rate limit; retry after {retry_after:.1f} s.")
+        self.retry_after = retry_after
+
+
+def rate_limit_delay(error) -> float | None:
+    """Seconds to wait if `error` is an HTTP 429 from the provider, else None."""
+    if getattr(error, "status_code", None) != 429:
+        return None
+    headers = getattr(getattr(error, "response", None), "headers", None) or {}
+    try:
+        return max(0.0, float(headers.get("retry-after")))
+    except (TypeError, ValueError):
+        pass
+    match = re.search(r"try again in ([0-9]+(?:\.[0-9]+)?)s", str(error))
+    return float(match.group(1)) if match else 10.0
 
 
 def valid_finish(args) -> bool:
@@ -46,6 +92,26 @@ class Screenshot:
         return struct.unpack(">II", self.png[16:24])
 
 
+def downscale(screenshot: Screenshot, max_width: int) -> Screenshot:
+    """Shrink a screenshot to at most `max_width` pixels wide, keeping its shape.
+
+    Fewer pixels means fewer model input tokens per step. Smaller text is harder
+    to read, so callers choose the width deliberately.
+    """
+    width, height = screenshot.size
+    if width <= max_width:
+        return screenshot
+    from io import BytesIO
+
+    from PIL import Image
+
+    with Image.open(BytesIO(screenshot.png)) as image:
+        resized = image.convert("RGB").resize((max_width, round(height * max_width / width)), Image.LANCZOS)
+    output = BytesIO()
+    resized.save(output, format="PNG", optimize=True)
+    return Screenshot(output.getvalue())
+
+
 class GroqVision:
     def __init__(self, model="qwen/qwen3.8-27b", *, client: Any = None):
         if client is None:
@@ -55,8 +121,19 @@ class GroqVision:
         self.client = client
         self.model = model
 
-    def decide(self, screenshot: Screenshot, transcript) -> ToolCall:
-        response = self.client.chat.completions.create(
+    def decide(self, screenshot: Screenshot, transcript) -> Proposal:
+        try:
+            response = self._request_decision(screenshot, transcript)
+        except Exception as error:
+            delay = rate_limit_delay(error)
+            if delay is None:
+                raise
+            # Provider messages include account identifiers; keep only the delay.
+            raise RateLimited(delay) from None
+        return self._parse_decision(response)
+
+    def _request_decision(self, screenshot: Screenshot, transcript):
+        return self.client.chat.completions.create(
             model=self.model, max_completion_tokens=512,
             **({"reasoning_effort": "none"} if self.model == "qwen/qwen3.8-27b" else {}),
             messages=[
@@ -74,6 +151,9 @@ class GroqVision:
             ],
             tools=VISION_TOOLS, tool_choice="required", parallel_tool_calls=False,
         )
+
+    @staticmethod
+    def _parse_decision(response) -> Proposal:
         if len(response.choices) != 1:
             raise ValueError("Expected one vision action response.")
         choice = response.choices[0]
@@ -87,11 +167,14 @@ class GroqVision:
             raise ValueError("Vision tool arguments must be JSON.") from error
         if not isinstance(args, dict):
             raise ValueError("Vision tool arguments must be an object.")
+        # Separate the reason before validation, so it never reaches the gateway
+        # as an action argument. A missing or malformed reason never fails a step.
+        reason = clean_reason(args.pop("reason", None))
         if call.name == "finish" and valid_finish(args):
-            return ToolCall("finish", args)
+            return Proposal(ToolCall("finish", args), reason)
         if call.name == "scroll" and set(args) == {"direction", "amount"}:
             # The gateway is the authority on direction and amount bounds.
-            return ToolCall("scroll", args)
+            return Proposal(ToolCall("scroll", args), reason)
         raise ValueError("Vision returned an unknown tool or invalid arguments.")
 
     def describe(self, screenshot: Screenshot) -> str:

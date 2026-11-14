@@ -7,12 +7,16 @@ from crescendo_security.policy import Decision, authorize
 
 from .loop import AgentState, RunResult
 from .model import Entry
-from .vision import valid_finish
+from .vision import Proposal, RateLimited, downscale, valid_finish
+
+# Longest provider-requested pause we accept before one retry within a step.
+MAX_RATE_LIMIT_WAIT = 15.0
 
 
 def run_vision_agent(goal, grant, desktop, model, *, max_steps=5,
-                     deadline_seconds=120.0, clock=time.monotonic,
-                     on_screenshot=None, finish_validator=None) -> RunResult:
+                     deadline_seconds=120.0, clock=time.monotonic, sleep=time.sleep,
+                     on_screenshot=None, finish_validator=None,
+                     max_image_width=None, on_rate_limit=None) -> RunResult:
     if type(max_steps) is not int or not 1 <= max_steps <= 10:
         raise ValueError("max_steps must be an integer from 1 to 10.")
     if not math.isfinite(deadline_seconds) or not 0 < deadline_seconds <= 120:
@@ -24,13 +28,35 @@ def run_vision_agent(goal, grant, desktop, model, *, max_steps=5,
         if clock() >= deadline:
             return state.stop("deadline")
         screenshot = desktop.capture_screen()
+        if max_image_width is not None:
+            # Scale before saving so the saved PNG stays exactly what the model receives.
+            screenshot = downscale(screenshot, max_image_width)
         if on_screenshot is not None:
             on_screenshot(step + 1, screenshot)
         state.transcript.append(Entry("observation", f"Current screenshot captured: {screenshot.size}. Image supplied separately."))
         if clock() >= deadline:
             return state.stop("deadline")
-        call = model.decide(screenshot, state.transcript)
-        state.transcript.append(Entry("action", json.dumps({"tool": call.name, "args": dict(call.args)})))
+        try:
+            proposal = model.decide(screenshot, state.transcript)
+        except RateLimited as limited:
+            # One bounded wait per step, only if it fits before the deadline. No
+            # transcript entry: provider throttling is not page evidence.
+            wait = limited.retry_after
+            if wait > MAX_RATE_LIMIT_WAIT or clock() + wait >= deadline:
+                return state.stop("rate_limited")
+            if on_rate_limit is not None:
+                on_rate_limit(step + 1, wait)
+            sleep(wait)
+            try:
+                proposal = model.decide(screenshot, state.transcript)
+            except RateLimited:
+                return state.stop("rate_limited")
+        # Models may return a bare ToolCall (no reason) or a Proposal.
+        call, reason = (proposal.call, proposal.reason) if isinstance(proposal, Proposal) else (proposal, None)
+        action = {"tool": call.name, "args": dict(call.args)}
+        if reason is not None:
+            action["reason"] = reason  # The model's own, untrusted account; display only.
+        state.transcript.append(Entry("action", json.dumps(action)))
         # A model request already in flight can overrun; admit no action afterward.
         if clock() >= deadline:
             return state.stop("deadline")

@@ -5,8 +5,6 @@ import json
 import os
 from pathlib import Path
 import re
-import select
-import sys
 import webbrowser
 from uuid import uuid4
 from secrets import token_hex
@@ -16,16 +14,6 @@ from crescendo_agent.e2b_desktop import open_e2b_desktop
 from crescendo_agent.vision import GroqVision
 from crescendo_agent.vision_loop import run_vision_agent
 from crescendo_security.policy import TaskGrant
-
-
-def wait_for_viewer(viewer):
-    viewer.wait_connected()
-    print("Viewer stream transport connected. Confirm that the actual remote page is visible.", flush=True)
-    print("When the desktop is visible, press Enter here to start the agent (45-second limit).", flush=True)
-    if not select.select([sys.stdin], [], [], 45)[0]:
-        raise TimeoutError("Viewer wait expired; desktop will be cleaned up.")
-    if not sys.stdin.readline():
-        raise RuntimeError("Interactive terminal required for --watch.")
 
 
 def validate_code_answer(answer):
@@ -42,8 +30,8 @@ def main():
     parser.add_argument("--save-screenshots", action="store_true", help="Save the exact model-input PNGs under ignored .demo-artifacts/ for diagnosis.")
     args = parser.parse_args()
     if args.watch:
-        # Check the optional viewer dependency before creating a metered desktop.
-        import crescendo_agent.live_view
+        # Load the optional viewer dependency before creating a metered desktop.
+        from crescendo_agent.live_view import wait_for_viewer
     for name in ("E2B_API_KEY", "GROQ_API_KEY"):
         if not os.environ.get(name):
             raise SystemExit(f"Set {name} in this terminal first.")

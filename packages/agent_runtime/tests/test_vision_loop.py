@@ -128,8 +128,8 @@ def test_vision_proposals_use_one_current_image_and_structured_tools():
     png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jh1sAAAAASUVORK5CYII=")
     client = Mock()
     client.chat.completions.create.return_value = response("scroll", {"direction": "down", "amount": 2})
-    call = GroqVision(client=client).decide(Screenshot(png), [Entry("goal", "Find code below")])
-    assert call == ToolCall("scroll", {"direction": "down", "amount": 2})
+    proposal = GroqVision(client=client).decide(Screenshot(png), [Entry("goal", "Find code below")])
+    assert proposal.call == ToolCall("scroll", {"direction": "down", "amount": 2})
     request = client.chat.completions.create.call_args.kwargs
     assert request["tool_choice"] == "required"
     assert request["parallel_tool_calls"] is False

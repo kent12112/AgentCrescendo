@@ -169,7 +169,8 @@ def test_watch_demo_waits_before_agent_and_cleans_up(monkeypatch, wait_fails):
         events.append("waited for user")
         if wait_fails:
             raise TimeoutError("expired")
-    main.__globals__["wait_for_viewer"] = wait
+    # The script imports the shared helper inside its --watch branch, at call time.
+    monkeypatch.setattr("crescendo_agent.live_view.wait_for_viewer", wait)
     if wait_fails:
         with pytest.raises(TimeoutError, match="expired"):
             main()
@@ -206,3 +207,27 @@ def test_proxy_reports_sanitized_upstream_connection_failure(monkeypatch):
             with client.websocket_connect(ORIGIN.replace("http://", "ws://") + "/websockify", headers={"origin": ORIGIN}):
                 pass
     assert errors == ["WEBSOCKET_TRANSPORT_ERROR"]
+
+
+@pytest.mark.parametrize("typed,close,error", [
+    (b"\n", False, None),                       # user pressed Enter
+    (b"", False, TimeoutError),                 # nobody pressed Enter in time
+    (b"", True, RuntimeError),                  # no interactive terminal (input closed)
+])
+def test_shared_wait_for_viewer(typed, close, error):
+    import os
+    from crescendo_agent.live_view import wait_for_viewer
+    read_fd, write_fd = os.pipe()
+    os.write(write_fd, typed)
+    if close:
+        os.close(write_fd)
+    viewer = LiveViewHandle("http://127.0.0.1/viewer")
+    viewer.connected.set()
+    with os.fdopen(read_fd) as stream:
+        if error is None:
+            wait_for_viewer(viewer, timeout=1, stream=stream)
+        else:
+            with pytest.raises(error):
+                wait_for_viewer(viewer, timeout=0.05, stream=stream)
+    if not close:
+        os.close(write_fd)

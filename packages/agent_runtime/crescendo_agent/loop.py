@@ -13,7 +13,7 @@ from .model import TOOLS, Entry, Model
 
 @dataclass
 class RunResult:
-    status: Literal["finished", "step_limit", "deadline"]
+    status: Literal["finished", "step_limit", "deadline", "rate_limited"]
     answer: str | None
     sources: list[str]
     transcript: list[Entry]
