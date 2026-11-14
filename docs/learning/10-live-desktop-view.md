@@ -114,5 +114,30 @@ All 194 Python tests and the local proxy browser smoke check passed after this
 revision. The remote connection cause and incorrect-code cause remain unconfirmed
 until the diagnostic run supplies evidence. No automatic paid retries were added.
 
+## Live result (November 13, 2026)
+
+A scripted probe (one desktop, no model calls, no browser) checked each hop
+through the local proxy: the bootstrap link returned 307 and set the session
+cookie; `vnc.html`, `app/ui.js`, and `core/rfb.js` returned 200; a WebSocket
+opened with the local Origin and cookie was accepted with the `binary`
+subprotocol, and the first upstream bytes were `RFB 003.008`, the VNC server
+greeting. The proxy, E2B routing, traffic token, and x11vnc were all working.
+
+The user then ran `scripts/e2b_vision_agent_demo.py --watch --save-screenshots`
+and reported seeing the real remote desktop before pressing Enter, and seeing
+the page scroll to "After scrolling" live. The same run passed F07: the model
+chose `scroll(down, 5)` and finished with the target code (`57D244`), with 0
+denials. The artifacts are in `.demo-artifacts/vision-68ab4aaf488a44959c109ffcc1ac6b13/`.
+
+The earlier "failed to connect" report predates the 30-second connection gate.
+Its cause was not reproduced and remains unconfirmed; timing (viewing before
+readiness or after cleanup) is plausible but unproven. A first attempt in this
+session failed before desktop creation with E2B 401 because an old
+`E2B_API_KEY` exported in the user's shell overrode `.env`.
+
+Limit: worst-case setup (~15 s) + connection gate (30 s) + Enter wait (45 s) +
+agent deadline (120 s) exceeds the 180-second sandbox lifetime. Normal runs fit,
+but a slow run could lose the desktop mid-task.
+
 References: [E2B desktop streaming](https://github.com/e2b-dev/desktop),
 [WebSocket client API](https://websockets.readthedocs.io/en/stable/reference/asyncio/client.html).

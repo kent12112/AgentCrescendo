@@ -50,7 +50,8 @@ public-page evidence; provider termination not independently checked.
 
 ## Open issues and next action
 
-- Earlier reported wrong answer (`.demo-artifacts/vision-9e57…`) is unexplained;
-  its PNGs show correct observation but no answer was saved.
+- Correction (same day): the earlier wrong answer was `visual=51,174`, recorded in
+  `docs/learning/10-live-desktop-view.md`; the six-hex finish check addresses it.
+  The `vision-9e57…` run's answer was not saved, so it is not tied to that failure.
 - Optional: repeat the run a few times to estimate reliability before W1-4/W1-F12.
 - Next per status: W1-1 live viewer, then W1-6 public-page visual research.

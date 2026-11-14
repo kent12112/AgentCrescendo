@@ -111,7 +111,7 @@ later change. Preserve the exit criteria when reducing optional scope.
 - [x] W1-F05: Real E2B screenshot sent as an image to a vision model; user-reported random-code recognition recorded.
 - [x] W1-F06: Authorized host-driven scroll between screenshots; user-reported before/after code recognition recorded.
 - [x] W1-F07: Model chooses bounded scroll actions and correctly finishes the visual task; inspect saved model-input PNGs and record the live result. One passing live fixture run recorded November 13, 2026 ([handoff](handoffs/2026-11-13-claude-w1-f07-model-scroll.md)); not a reliability benchmark.
-- [ ] W1-F08: Authenticated live viewer renders the real desktop and visibly follows agent actions; proxy implementation/local tests exist, remote connection remains unresolved.
+- [x] W1-F08: Authenticated live viewer renders the real desktop and visibly follows agent actions. User-reported live run November 13, 2026, with a scripted hop-by-hop proxy check ([handoff](handoffs/2026-11-13-claude-w1-1-live-viewer.md)).
 - [ ] W1-F09: Demonstrate the complete visual research slice on a permitted public page: navigate, observe screenshot, model-selected scroll, fresh observation, and source-supported cited answer. Record which tools supplied the answer evidence.
 - [ ] W1-F10: Record controlled live allowed/blocked network results, browser redirects/subrequests, private/backend restrictions, IPv6/DNS behavior, and E2B exceptions. Resolve security gaps or explicitly narrow supported behavior before adding workers.
 - [ ] W1-F11: Confirm provider-side desktop termination after normal completion and a deliberate failure; document the lifetime fallback and cleanup limits.

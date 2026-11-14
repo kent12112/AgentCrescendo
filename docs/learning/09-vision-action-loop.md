@@ -86,9 +86,11 @@ fail. Live scripts load keys from the git-ignored `.env` via
 Limits: one run on a controlled two-section fixture; a single maximum-size scroll
 happened to land on the target. This does not measure repeat reliability, token
 usage or cost, multi-step scrolling, or public pages. The earlier reported wrong
-answer (`.demo-artifacts/vision-9e57…`, whose PNGs show correct observation) had
-no saved answer, so its cause remains unknown. Provider termination was not
-independently checked.
+answer was `visual=51,174`, a coordinate-like string rather than a code (recorded
+in [live desktop view](10-live-desktop-view.md)); the six-hex-character finish
+check was added in response. The saved `.demo-artifacts/vision-9e57…` PNGs show
+correct observation, but that run's answer was not saved, so it cannot be tied to
+a specific failure. Provider termination was not independently checked.
 
 Scroll pointer fix (November 13, 2026): `E2BDesktop.scroll()` called Playwright's
 `page.mouse.move(200, 200)` and then E2B's `sandbox.scroll`. They are different
