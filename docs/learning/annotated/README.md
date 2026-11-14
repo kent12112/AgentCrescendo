@@ -17,3 +17,9 @@ Read them in the order a run executes:
 File 5 shows the pointer fix: `page.mouse.move` did not move the real desktop
 pointer that E2B's scroll uses (live-checked), so `scroll()` now moves it with
 E2B's `move_mouse` first.
+
+Out of date since W1-6 (November 13, 2026): `vision.py` gained `downscale()`,
+`RateLimited`, and a split `decide()`; `vision_loop.py` gained image downscaling
+and bounded rate-limit retry; `e2b_desktop.py` gained stylesheet filtering,
+`wait_until="load"`, and `lifetime_seconds`; `vision.py` also gained `Proposal`
+and reasons; `wait_for_viewer` moved to `live_view.py`. Refresh the copies after review.

@@ -78,9 +78,11 @@ Week 1 proves screenshot observation, model-selected bounded scrolling, and
 authenticated viewing on one desktop. The current vision fixture and text
 research loop are separate implementations; combining permitted public-page
 navigation, visual scrolling, and a cited answer is an explicit acceptance task.
-Clicking, typing, arbitrary window control, and logged-in browsing are outside
-this release's required scope. Add a new action only with its own authorization
-and evaluation case. Week 4 integrates live viewing into the dashboard.
+Typing, arbitrary window control, and logged-in browsing are outside this
+release's required scope. Clicking inside the page and broad public browsing are
+planned as Week 1 follow-ups ([decision 0001](decisions/0001-product-positioning.md)).
+Add a new action only with its own authorization and evaluation case. Week 4
+integrates live viewing into the dashboard.
 
 ## Feature tracking
 
@@ -112,13 +114,22 @@ later change. Preserve the exit criteria when reducing optional scope.
 - [x] W1-F06: Authorized host-driven scroll between screenshots; user-reported before/after code recognition recorded.
 - [x] W1-F07: Model chooses bounded scroll actions and correctly finishes the visual task; inspect saved model-input PNGs and record the live result. One passing live fixture run recorded November 13, 2026 ([handoff](handoffs/2026-11-13-claude-w1-f07-model-scroll.md)); not a reliability benchmark.
 - [x] W1-F08: Authenticated live viewer renders the real desktop and visibly follows agent actions. User-reported live run November 13, 2026, with a scripted hop-by-hop proxy check ([handoff](handoffs/2026-11-13-claude-w1-1-live-viewer.md)).
-- [ ] W1-F09: Demonstrate the complete visual research slice on a permitted public page: navigate, observe screenshot, model-selected scroll, fresh observation, and source-supported cited answer. Record which tools supplied the answer evidence.
+- [x] W1-F09: Demonstrate the complete visual research slice on a permitted public page: navigate, observe screenshot, model-selected scroll, fresh observation, and source-supported cited answer. Record which tools supplied the answer evidence. User-watched live pass November 13, 2026 ([handoff](handoffs/2026-11-13-claude-w1-6-visual-research.md)); one page and question, not a benchmark.
 - [ ] W1-F10: Record controlled live allowed/blocked network results, browser redirects/subrequests, private/backend restrictions, IPv6/DNS behavior, and E2B exceptions. Resolve security gaps or explicitly narrow supported behavior before adding workers.
 - [ ] W1-F11: Confirm provider-side desktop termination after normal completion and a deliberate failure; document the lifetime fallback and cleanup limits.
 - [ ] W1-F12: Evaluate two model candidates on the same fixed research task and budget; record configuration, correctness, citation support, usage/cost, and latency.
 - [ ] W1-F13: Save annotated successful/failed traces and a Week 1 decision record; update README to distinguish CLI execution from the draft-only dashboard.
 
 Exit: one agent researches a public source using the visual loop and returns a cited result while the user watches its real desktop and scrolling. Prove permitted browsing works and private/backend network destinations are blocked. Confirm E2B networking and live-view access fit the security design; resolve gaps before adding workers. Complete the two-model comparison and record cleanup evidence.
+
+### Week 1 follow-ups (decided November 13, 2026)
+
+Placed after Week 1 exit and before Week 3 multi-agent work, per
+[decision 0001](decisions/0001-product-positioning.md). Broad browsing depends on
+W1-F10 network evidence.
+
+- [ ] W1X-F01: `click(x, y)` with the real desktop pointer, authorized only inside the browser page area; every resulting request still passes the browser filter and E2B firewall. Tests: clicks outside the page area denied, POST form blocked, link to a blocked host blocked, download blocked; live case following a link between two pages.
+- [ ] W1X-F02: Broad public browsing: allow public destinations while blocking private, link-local, metadata, and backend addresses (proven in W1-F10). The model moves between pages only by clicking existing links or search results, never by composing URLs. Agents never hold credentials.
 
 ## Week 2 — Durable run lifecycle
 

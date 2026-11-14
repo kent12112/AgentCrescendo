@@ -19,6 +19,10 @@ This is an evidence summary, not a declaration that Week 1 is complete.
   see the [pointer handoff](handoffs/2026-11-13-claude-scroll-pointer.md).
 - Live viewer (W1-F08): user saw the real E2B desktop in the local noVNC viewer and
   watched the model's scroll; the same run passed F07. One user-reported run.
+- Visual research (W1-F09): Wikipedia Boston article, model-selected scrolling,
+  cited answer verified visible on screen; user watched it live. Stylesheets from
+  permitted hosts now load; screenshots downscaled to 768 px; one bounded retry on
+  provider rate limits; model reasons recorded.
 - A user-reported live text research run answered Boston and reported the same
   Wikipedia URL as its source and visited page. This is one run, not a benchmark.
 - Before baseline commit: 194 Python tests passed; web TypeScript checking and
@@ -40,14 +44,17 @@ All tasks below are unassigned. Claim only the task you are actually starting.
 | W1-3 | Finish controlled live network checks for private/backend destinations, redirects/subrequests, IPv6, and DNS behavior; document provider exceptions and limits | Unassigned | Open; preliminary live probes and local interception checks exist |
 | W1-4 | Compare two model candidates on the same fixed research task; record configuration, correctness/citation support, cost, and latency | Unassigned | Open |
 | W1-5 | Record a cited research trace, provider termination evidence, and remaining limitations; reconcile README with implemented CLI demos and draft-only dashboard | Unassigned | Open |
-| W1-6 | Connect permitted public-page research to screenshot observation and model-selected scrolling; produce a cited answer while the user watches the same desktop (plan W1-F09) | Unassigned | Open; text research and visual fixture loops currently separate |
+| W1-6 | Connect permitted public-page research to screenshot observation and model-selected scrolling; produce a cited answer while the user watches the same desktop (plan W1-F09) | Unassigned | Done (F09): user watched a live Wikipedia pass with a cited, on-screen-verified answer; see [W1-6 handoff](handoffs/2026-11-13-claude-w1-6-visual-research.md) |
 
-Suggested next task: W1-6 (visual research on a public page while the user watches). Do not start Week 2 orchestration
+Suggested next task: W1-3 (network checks), the gate for broad public browsing (W1X-F02); then W1X-F01 clicking. Do not start Week 2 orchestration
 on the assumption that Week 1's networking and live-view boundaries are resolved.
 
 ## Active ownership
 
-No active implementation claims. Claude released W1-1 / W1-F08 and W1-2 / W1-F07
+No active implementation claims. Claude released W1-6 / W1-F09 on November 13,
+2026; see the [W1-6 handoff](handoffs/2026-11-13-claude-w1-6-visual-research.md).
+
+Claude released W1-1 / W1-F08 and W1-2 / W1-F07
 on November 13, 2026; see the
 [viewer handoff](handoffs/2026-11-13-claude-w1-1-live-viewer.md) and the
 [F07 handoff](handoffs/2026-11-13-claude-w1-f07-model-scroll.md).
