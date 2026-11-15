@@ -1,5 +1,10 @@
 # Annotated reading copies: the F07 vision run
 
+**Historical copies:** current executable source now contains learning comments.
+Use the [current reading guide](../12-commented-source.md) to follow the refactored
+code and current retry/reason behavior. These older copies remain as historical
+learning material.
+
 Line-by-line commented copies of the code on the model-selected scroll path
 (plan W1-F07), written November 13, 2026 against `9130a21` plus the working tree.
 They are for reading only: nothing imports or runs them, and they will drift when

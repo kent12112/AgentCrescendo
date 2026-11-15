@@ -1,6 +1,6 @@
 # Current development status
 
-Updated: November 13, 2026, by Claude.
+Updated: November 14, 2026, by Codex.
 Implementation baseline: `584e662`.
 Current milestone: Week 1 — one useful, constrained desktop agent.
 
@@ -51,7 +51,22 @@ on the assumption that Week 1's networking and live-view boundaries are resolved
 
 ## Active ownership
 
-No active implementation claims. Claude released W1-6 / W1-F09 on November 13,
+No active implementation claims. Codex completed and released ANNOTATE on
+November 14, 2026: learning comments directly in source/tests/scripts and supported
+configuration, plus a [reading guide](learning/12-commented-source.md) covering
+strict JSON. Local checks: 239 Python tests, TypeScript/build, unchanged syntax
+and configuration comparisons; see the
+[annotation handoff](handoffs/2026-11-14-codex-source-comments.md). Changes remain
+uncommitted. Week 1 live-provider gates are unchanged.
+
+Previous claim: Codex completed and released REFACTOR on
+November 14, 2026: API auth/routes, web draft feature, remote browser bootstrap,
+and codebase guide. Local evidence: 239 Python tests, TypeScript, production build,
+unchanged OpenAPI and remote program strings. Changes remain uncommitted; see the
+[refactor handoff](handoffs/2026-11-14-codex-codebase-refactor.md) and
+[codebase guide](codebase.md).
+
+Claude released W1-6 / W1-F09 on November 13,
 2026; see the [W1-6 handoff](handoffs/2026-11-13-claude-w1-6-visual-research.md).
 
 Claude released W1-1 / W1-F08 and W1-2 / W1-F07

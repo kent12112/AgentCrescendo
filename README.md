@@ -2,7 +2,9 @@
 
 A general-purpose workspace where agents operating isolated computers coordinate everyday tasks. Built as a learning project focused on applied AI, reliable distributed execution, and externally enforced agent permissions.
 
-**Current implementation: local task drafts.** The dashboard submits a goal and limits to FastAPI, which persists the draft in PostgreSQL. Execution, E2B desktops, Temporal, messaging, automatic retention, and model calls are not connected yet. There are no simulated agent runs or invented results.
+**Current implementation:** the local dashboard saves and deletes task drafts through FastAPI and PostgreSQL. Separate Python CLI demos run bounded text and screenshot-based research on E2B with Groq, including model-selected scrolling and a local live viewer. The dashboard does not start these agents. Temporal, multi-agent messaging, and automatic retention remain planned.
+
+Start with the [codebase guide](docs/codebase.md) for the file structure, reading order, and execution paths. See [current status](docs/status.md) for observed results and remaining checks.
 
 ## Run locally
 
@@ -68,7 +70,11 @@ docker compose stop db
 | Path | Purpose |
 |---|---|
 | `apps/web/` | Next.js / TypeScript / Tailwind dashboard and server-side API proxy |
-| `services/api/crescendo_api/` | FastAPI schemas, local authentication, SQLAlchemy models, endpoints |
+| `services/api/crescendo_api/` | API assembly, authentication, resource routes, schemas, and persistence |
+| `apps/web/features/drafts/` | Draft UI, state/request handling, and response types |
+| `packages/agent_runtime/crescendo_agent/` | Text/vision loops, model adapters, E2B desktop and live viewer |
+| `packages/security/crescendo_security/` | Task grants, tool authorization, destination policy |
+| `scripts/` | Local setup, runnable demos, and explicit smoke checks |
 | `services/api/migrations/` | Versioned Alembic database changes |
 | `services/api/tests/` | Authentication, request limits, persistence, and migration checks |
 | `compose.yaml` | Local PostgreSQL, bound to loopback |
@@ -76,9 +82,13 @@ docker compose stop db
 
 ## Design and learning
 
+The executable source includes line-by-line learning comments. Start with the
+[commented-source guide](docs/learning/12-commented-source.md) for a reading path
+and explanations of JSON configuration, which cannot contain comments.
+
 * [Visual architecture and technical decisions](docs/visual-architecture.md)
 * [Full architecture](docs/architecture.md)
 * [Six-week implementation and learning plan](docs/implementation-plan.md)
 * [First learning exercise: durable task drafts](docs/learning/01-task-drafts.md)
 
-Next milestone: one isolated E2B desktop, scoped tool admission, verified destination restrictions, and a bounded research loop. Choose a model through a measured comparison before committing to a default.
+Next milestones: finish live network and desktop-cleanup evidence, compare model candidates, then add durable execution. See the status document for the remaining Week 1 gates.
