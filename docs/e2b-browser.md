@@ -66,7 +66,8 @@ Expected output: finished status, an answer identifying Boston, Wikipedia as a
 source, and the page in `Visited`. Blocked browser requests may be nonzero because
 the text-only browser blocks images, stylesheets, and other non-document traffic.
 The sandbox is killed on normal completion or exceptions; its 180-second lifetime
-is a fallback if the controlling process disappears. The agent has five steps
+(set to kill, not pause, on expiry) is a fallback if the controlling process
+disappears. Live termination evidence and cleanup limits: [termination](e2b-termination.md). The agent has five steps
 and a 120-second deadline checked between steps. Each model decision permits
 one corrective retry for provider-rejected tool generation (at most ten API
 requests across five steps); other API errors are not retried.

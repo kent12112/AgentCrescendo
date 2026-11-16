@@ -1,6 +1,6 @@
 # Current development status
 
-Updated: November 15, 2026, by Codex.
+Updated: November 16, 2026, by Claude.
 Implementation baseline: `584e662`.
 Current milestone: Week 1 — one useful, constrained desktop agent.
 
@@ -43,13 +43,20 @@ All tasks below are unassigned. Claim only the task you are actually starting.
 | W1-2 | Inspect the screenshots delivered to the vision model and demonstrate correct observation, scrolling, and final answer | Unassigned | Fixture done (F07): one live pass with inspected PNGs, see [handoff](handoffs/2026-11-13-claude-w1-f07-model-scroll.md). Earlier wrong answer was `visual=51,174` (format check added); public-page case is W1-6 |
 | W1-3 | Finish controlled live network checks for private/backend destinations, redirects/subrequests, IPv6, and DNS behavior; document provider exceptions and limits | Unassigned | Open; preliminary live probes and local interception checks exist. IPv6 checked November 16: one live run, no guest IPv6 route. Redirects, DNS rebinding, subrequests remain |
 | W1-4 | Compare two model candidates on the same fixed research task; record configuration, correctness/citation support, cost, and latency | Unassigned | Open |
-| W1-5 | Record a cited research trace, provider termination evidence, and remaining limitations; reconcile README with implemented CLI demos and draft-only dashboard | Unassigned | Open |
+| W1-5 | Record a cited research trace, provider termination evidence, and remaining limitations; reconcile README with implemented CLI demos and draft-only dashboard | Unassigned | Open; termination evidence done (F11, [termination](e2b-termination.md)); trace and README remain |
 | W1-6 | Connect permitted public-page research to screenshot observation and model-selected scrolling; produce a cited answer while the user watches the same desktop (plan W1-F09) | Unassigned | Done (F09): user watched a live Wikipedia pass with a cited, on-screen-verified answer; see [W1-6 handoff](handoffs/2026-11-13-claude-w1-6-visual-research.md) |
 
 Suggested next task: W1-3 (network checks), the gate for broad public browsing (W1X-F02); then W1X-F01 clicking. Do not start Week 2 orchestration
 on the assumption that Week 1's networking and live-view boundaries are resolved.
 
 ## Active ownership
+
+W1-F11 (provider termination) completed and released by Claude on November 16,
+2026. The adapter now sets `on_timeout: kill` explicitly. A new live check confirms
+destruction through E2B's API for normal exit, deliberate failure, and an abandoned
+process (lifetime timer). Two passing live runs per scenario; 261 Python tests
+passed. See [termination](e2b-termination.md) and the
+[F11 handoff](handoffs/2026-11-16-claude-w1-f11-termination.md). Uncommitted.
 
 W1-3 / W1-F10 IPv6 probe completed locally and released by Claude on November 16,
 2026. Adds IPv6 probes and the unit-tested `evaluate_preflight()`; 252 Python tests

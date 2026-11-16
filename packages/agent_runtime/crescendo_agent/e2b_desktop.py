@@ -470,7 +470,10 @@ def open_e2b_desktop(grant: TaskGrant, *, sandbox_type=None, playwright_factory=
         "allow_out": sorted(grant.allowed_hosts),
         # Require authenticated access to the sandbox’s exposed ports.
         "allow_public_traffic": False,
-    })
+    # When the lifetime runs out, destroy the desktop rather than pause it. E2B's default
+    # is currently "kill", but stating it means a provider default change cannot turn the
+    # safety net into a paused desktop that keeps its disk and can be resumed.
+    }, lifecycle={"on_timeout": "kill"})
     # Try the following operations; matching except clauses handle failures. The finally block runs
     # on every exit.
     try:

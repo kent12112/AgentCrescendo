@@ -542,6 +542,8 @@ def test_remote_setup_failure_still_destroys_sandbox():
     # Assert that factory.create.call_args.kwargs['timeout'] equals 180. If false, this check fails
     # with AssertionError.
     assert factory.create.call_args.kwargs["timeout"] == 180
+    # The lifetime safety net must destroy the desktop, not pause it.
+    assert factory.create.call_args.kwargs["lifecycle"] == {"on_timeout": "kill"}
 
 
 # Define test_desktop_lifetime_is_configurable_within_bounds with no parameters.
