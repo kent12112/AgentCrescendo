@@ -1,77 +1,49 @@
-# Learn: Document this module, class, or function with a docstring; it is not an action or a model
-# instruction.
 """Visual research on a permitted public page: navigate, screenshots, model-selected scrolling, cited answer."""
-# Learn: Import argparse: parses the explicit command-line options for this demo.
+# Load the library for reading command-line options.
 import argparse
-# Learn: From contextlib, import nullcontext (supplies a no-op with-block when optional viewing is
-# disabled).
+# Import a do-nothing context manager for runs without a live viewer.
 from contextlib import nullcontext
-# Learn: Import json: encodes/decodes JSON for tool arguments, transcripts, or HTTP payloads.
+# Load JSON parsing and formatting functions.
 import json
-# Learn: Import os: reads process environment/configuration and OS facilities.
+# Load access to environment variables.
 import os
-# Learn: From pathlib, import Path (represents filesystem paths and explicit file operations).
+# Import the class used to build file and directory paths.
 from pathlib import Path
-# Learn: Import time: measures monotonic elapsed time and provides bounded pauses.
+# Load the clock used to measure elapsed time.
 import time
-# Learn: From urllib.parse, import urlsplit (parses scheme, hostname, port, and path instead of guessing
-# from substrings).
+# Import the function that separates a URL into its components.
 from urllib.parse import urlsplit
-# Learn: From uuid, import uuid4 (generates independent random UUID identifiers).
+# Import the function that generates random unique IDs.
 from uuid import uuid4
-# Learn: Import webbrowser: opens the local viewer in the user browser.
+# Load the helper for opening a URL in your local browser.
 import webbrowser
 
-# Learn: From crescendo_agent.local_env, import load_local_env (loads root .env values without replacing
-# existing process values).
+# Import our helper that loads local .env configuration.
 from crescendo_agent.local_env import load_local_env
-# Learn: From crescendo_agent.e2b_desktop, import open_e2b_desktop (owns restricted sandbox setup, browser
-# connection, and cleanup).
+# Import our context manager that creates, connects to, and cleans up an E2B desktop.
 from crescendo_agent.e2b_desktop import open_e2b_desktop
-# Learn: From crescendo_agent.vision, import GroqVision (adapts screenshot observations to Groq vision
-# requests).
+# Import our adapter for sending screenshots to a Groq vision model.
 from crescendo_agent.vision import GroqVision
-# Learn: From crescendo_agent.vision_loop, import run_vision_agent (runs the bounded
-# screenshot/proposal/authorization/action loop).
+# Import the agent loop that observes screenshots and executes allowed model actions.
 from crescendo_agent.vision_loop import run_vision_agent
-# Learn: From crescendo_security.policy, import TaskGrant (holds the task identity and immutable tool/host
-# allowlists).
+# Import the class describing a task’s allowed tools and hosts.
 from crescendo_security.policy import TaskGrant
 
-# Learn: Set SOURCE_URL to 'https://en.wikipedia.org/wiki/Boston'.
+# Store the article URL the demo will open.
 SOURCE_URL = "https://en.wikipedia.org/wiki/Boston"
 # An obscure infobox value: a model is unlikely to know it without reading the screen.
-# Learn: Set QUESTION to "What is Boston's GNIS feature ID, as listed in this article's infobox?".
+# Store the question the model must answer from the screen.
 QUESTION = "What is Boston's GNIS feature ID, as listed in this article's infobox?"
-# Learn: Set EXPECTED to '617565'.
+# Store the correct value used to grade the answer afterward.
 EXPECTED = "617565"
-# Learn: Set DESKTOP_LIFETIME_SECONDS to 300.
+# Allow the remote desktop to exist for up to 300 seconds.
 DESKTOP_LIFETIME_SECONDS = 300
-# Learn: Set ARTICLE_SELECTOR to '#mw-content-text'.
+# Store the CSS selector identifying Wikipedia’s article content.
 ARTICLE_SELECTOR = "#mw-content-text"  # Wikipedia's article body; absent on error pages.
 
 # Fixed expression run by automation (page scripts stay disabled). The needle is passed
 # as data, never as code. True when the text is drawn inside the current viewport.
-# Learn: Set VISIBLE_IN_VIEWPORT to 'needle => {\n const walker = document.createTreeWalker(document.body,
-# NodeFilter.SHOW_TEXT)....
-# Learn string line 1: Literal prompt, documentation, or fixture content: needle => {. It remains unchanged
-# at runtime.
-# Learn string line 2: Walk text nodes in the selected document without executing page-supplied code.
-# Learn string line 3: Literal prompt, documentation, or fixture content: while (walker.nextNode()) {. It
-# remains unchanged at runtime.
-# Learn string line 4: Declare a JavaScript binding for node = walker.currentNode;.
-# Learn string line 5: Declare a JavaScript binding for index = node.textContent.indexOf(needle);.
-# Learn string line 6: Literal prompt, documentation, or fixture content: if (index < 0) continue;. It
-# remains unchanged at runtime.
-# Learn string line 7: Declare a JavaScript binding for range = document.createRange();.
-# Learn string line 8: Bound the DOM Range around the expected text for visibility grading.
-# Learn string line 9: Bound the DOM Range around the expected text for visibility grading.
-# Learn string line 10: Read rendered text rectangles to grade whether evidence is on screen.
-# Learn string line 11: Accept a nonempty text rectangle intersecting the viewport vertically.
-# Learn string line 12: Close this embedded-language block or expression.
-# Learn string line 13: Close this embedded-language block or expression.
-# Learn string line 14: Report that no qualifying visible match was found.
-# Learn string line 15: Close this embedded-language block or expression.
+# Store a JavaScript function that checks whether the expected text is on screen.
 VISIBLE_IN_VIEWPORT = """needle => {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     while (walker.nextNode()) {
@@ -89,308 +61,243 @@ VISIBLE_IN_VIEWPORT = """needle => {
 }"""
 
 
-# Learn: Define validate_short_answer(answer). The body runs when called, not when defined.
+# Define a function that checks the model’s proposed final answer length.
 def validate_short_answer(answer):
-    # Learn: Take this branch only if the number of items/characters in answer.strip() is greater than 200.
+    # Remove surrounding whitespace and check whether the answer exceeds 200 characters.
     if len(answer.strip()) > 200:
-        # Learn: Return 'Answer in at most 200 characters with only the requested value. Inspect the
-        # screenshot again.' to the caller and stop this function.
+        # Return feedback asking the model to try again with a shorter answer.
         return "Answer in at most 200 characters with only the requested value. Inspect the screenshot again."
-    # Learn: Return None (no value) to the caller and stop this function.
+    # Return no feedback, meaning this length check accepts the answer.
     return None
 
 
-# Learn: Define grade(answer, expected, page_text, visible_at_finish). The body runs when called, not when
-# defined.
+# Define a function returning a pass/fail boolean and an explanation.
 def grade(answer, expected, page_text, visible_at_finish):
-    # Learn: Document this module, class, or function with a docstring; it is not an action or a model
-    # instruction.
     """Return (passed, reason). Text reading is for grading only; the model never saw it."""
-    # Learn: Take this branch only if expected is not in page_text.
+    # Check whether the source page is missing the known correct value.
     if expected not in page_text:
-        # Learn: Return the tuple (False, 'FIXTURE CHANGED: the source page no longer contains the expected
-        # value.') (positional values) to the caller and stop this function.
+        # Report that the source page no longer matches this demo’s expected content.
         return False, "FIXTURE CHANGED: the source page no longer contains the expected value."
-    # Learn: Take this branch only if answer is None (no value) OR expected is not in answer.
+    # Check whether the answer is missing or does not contain the correct value.
     if answer is None or expected not in answer:
-        # Learn: Return the tuple (False, 'FAIL: the answer does not contain the expected value.')
-        # (positional values) to the caller and stop this function.
+        # Report that the answer failed the correctness check.
         return False, "FAIL: the answer does not contain the expected value."
-    # Learn: Take this branch only if not (visible_at_finish).
+    # Check whether the correct value was absent from the final screen.
     if not visible_at_finish:
-        # Learn: Return the tuple (False, 'FAIL: the expected value was not on screen when the model
-        # finished.') (positional values) to the caller and stop this function.
+        # Report that the final screen did not support the answer.
         return False, "FAIL: the expected value was not on screen when the model finished."
-    # Learn: Return the tuple (True, 'PASS: correct answer, supported by the cited page and visible on
-    # screen at finish.') (positional values) to the caller and stop this function.
+    # Report success: the answer is correct and the value was visible on the source page.
     return True, "PASS: correct answer, supported by the cited page and visible on screen at finish."
 
 
-# Learn: Define model_tools(transcript). The body runs when called, not when defined.
+# Define a function that extracts the model’s proposed tool names from its transcript.
 def model_tools(transcript):
-    # Learn: Document this module, class, or function with a docstring; it is not an action or a model
-    # instruction.
     """Tools the model actually proposed, in order (its only evidence channel is screenshots)."""
-    # Learn: Return a list built from transcript by the comprehension with its filter to the caller and stop
-    # this function.
+    # Keep action entries, parse their JSON, and collect each action’s tool name.
     return [json.loads(entry.text)["tool"] for entry in transcript if entry.kind == "action"]
 
 
-# Learn: Define decision_lines(transcript). The body runs when called, not when defined.
+# Define a function that formats model proposals as readable numbered lines.
 def decision_lines(transcript):
-    # Learn: Document this module, class, or function with a docstring; it is not an action or a model
-    # instruction.
     """One readable line per proposal. Reasons are the model's own, untrusted account."""
-    # Learn: Set lines to a new list (empty).
+    # Start an empty list of formatted decision lines.
     lines = []
-    # Learn: Iterate over enumerate((json.loads(e.text) for e in transcript if e.kind == 'action'),
-    # start=1), binding (number, action) for each item.
+    # Parse action entries and loop through them with numbering starting at 1.
     for number, action in enumerate((json.loads(e.text) for e in transcript if e.kind == "action"), start=1):
-        # Learn: Set args to ', '.join((f'{key}={value!r}' for (key, value) in action['args'].items())); the
-        # arguments for the current operation.
+        # Format each argument as key=value and join the arguments with commas.
         args = ", ".join(f"{key}={value!r}" for key, value in action["args"].items())
-        # Learn: Append one item to the ordered collection on lines; inputs: an f-string that substitutes
-        # the expressions in {...} into the text.
+        # Add a line containing the action number, tool, arguments, and model-provided reason.
         lines.append(f"  {number}. {action['tool']}({args}) — reason: {action.get('reason', '(none given)')!r}")
-    # Learn: Return lines to the caller and stop this function.
+    # Return the collected decision lines.
     return lines
 
 
-# Learn: Define main(). The body runs when called, not when defined.
+# Define the function that sets up, runs, and reports this demo.
 def main():
-    # Learn: Call load_local_env with no arguments.
+    # Load local environment settings without replacing existing environment values.
     load_local_env()
-    # Learn: Set parser to argparse.ArgumentParser(description=__doc__); the command-line argument parser.
+    # Create a CLI parser; __doc__ supplies this module’s top docstring as its description.
     parser = argparse.ArgumentParser(description=__doc__)
-    # Learn: Declare this CLI option, its type/default, and help text on parser; inputs: '--model'.
+    # Accept --model; otherwise use GROQ_VISION_MODEL or the specified fallback model.
     parser.add_argument("--model", default=os.environ.get("GROQ_VISION_MODEL", "qwen/qwen3.8-27b"))
-    # Learn: Declare this CLI option, its type/default, and help text on parser; inputs: '--max-steps'.
+    # Accept an integer decision limit, defaulting to 8.
     parser.add_argument("--max-steps", type=int, default=8, help="Model decisions allowed (1-10).")
-    # Learn: Declare this CLI option, its type/default, and help text on parser; inputs: '--image-width'.
+    # Accept a screenshot width in pixels, defaulting to 768.
     parser.add_argument("--image-width", type=int, default=768,
-                        # Learn: Pass keyword help = 'Downscale model screenshots to this width to reduce
-                        # input tokens (default 768).'.
+                        # Set the help message displayed for the screenshot-width option.
                         help="Downscale model screenshots to this width to reduce input tokens (default 768).")
-    # Learn: Declare this CLI option, its type/default, and help text on parser; inputs: '--watch'.
+    # Make --watch a boolean flag that enables the local live viewer.
     parser.add_argument("--watch", action="store_true", help="Open the real desktop in a local live viewer before starting.")
-    # Learn: Declare this CLI option, its type/default, and help text on parser; inputs:
-    # '--save-screenshots'.
+    # Make --save-screenshots a boolean flag that enables diagnostic file saving.
     parser.add_argument("--save-screenshots", action="store_true", help="Save model-input PNGs and result.json under ignored .demo-artifacts/.")
-    # Learn: Set args to parser.parse_args(); the arguments for the current operation. Parse command-line
-    # values and reject unsupported argument syntax.
+    # Read the CLI options into args; invalid option syntax stops the program.
     args = parser.parse_args()
-    # Learn: Take this branch only if args.watch.
+    # Run this block only when --watch was supplied.
     if args.watch:
         # Load the optional viewer dependency before creating a metered desktop.
-        # Learn: From crescendo_agent.live_view, import wait_for_viewer (waits for transport connection and
-        # the user confirmation before agent actions).
+        # Import the helper that waits for viewer connection and user confirmation.
         from crescendo_agent.live_view import wait_for_viewer
-    # Learn: Iterate over the tuple ('E2B_API_KEY', 'GROQ_API_KEY') (positional values), binding name for
-    # each item.
+    # Check each required API-key environment variable in turn.
     for name in ("E2B_API_KEY", "GROQ_API_KEY"):
-        # Learn: Take this branch only if not (os.environ[name] with None as the missing-key default).
+        # Check whether this API key is missing or empty.
         if not os.environ.get(name):
-            # Learn: Raise SystemExit(f'Set {name} in this terminal first.') to stop the normal path.
+            # Stop the demo and tell the user which API key to configure.
             raise SystemExit(f"Set {name} in this terminal first.")
-    # Learn: Set host to urlsplit(SOURCE_URL).hostname; the parsed destination hostname rather than a
-    # substring of the URL.
+    # Extract the hostname from the source URL.
     host = urlsplit(SOURCE_URL).hostname
     # The model may only scroll and finish; "navigate" is used by this host code alone.
-    # Learn: Set tools to a set of 'navigate', 'screenshot', 'scroll', 'finish' (unique members).
+    # Create the set of tool permissions available to this demo.
     tools = {"navigate", "screenshot", "scroll", "finish"}
-    # Learn: Take this branch only if args.watch.
+    # Run this block only when --watch was supplied.
     if args.watch:
-        # Learn: Stage an object or add a value to this collection on tools; inputs: 'view_desktop'.
+        # Also permit desktop viewing when watch mode is enabled.
         tools.add("view_desktop")
-    # Learn: Set grant to TaskGrant('visual-research-demo', frozenset(tools), frozenset({host})); the task
-    # identity and fixed tool/host permissions; model output cannot expand these.
+    # Create a task grant with a task ID and immutable tool and hostname allowlists.
     grant = TaskGrant("visual-research-demo", frozenset(tools), frozenset({host}))
-    # Learn: Set model to GroqVision(args.model); the provider adapter or scripted test model used to
-    # propose actions.
+    # Create the vision-model adapter using the chosen model name.
     model = GroqVision(args.model)
-    # Learn: Set directory to None (no value); the optional local diagnostic artifact directory.
+    # Start with no diagnostic output directory.
     directory = None
-    # Learn: Set record_screenshot to None (no value).
+    # Start with no screenshot-saving callback.
     record_screenshot = None
-    # Learn: Set rate_waits to a new list (empty); the retry delays recorded for the demo report.
+    # Start an empty list of provider rate-limit wait durations.
     rate_waits = []
-    # Learn: Take this branch only if args.save_screenshots.
+    # Set up diagnostic saving only when --save-screenshots was supplied.
     if args.save_screenshots:
-        # Learn: Set directory to Path('.demo-artifacts') divided by 'research-' plus uuid4().hex; the
-        # optional local diagnostic artifact directory.
+        # Build a unique output path under .demo-artifacts; / joins path components.
         directory = Path(".demo-artifacts") / ("research-" + uuid4().hex)
-        # Learn: Create the artifact directory with the explicitly supplied parent/existence options on
-        # directory.
+        # Create the output directory and any missing parent directories.
         directory.mkdir(parents=True)
-        # Learn: Display diagnostic/result text without treating it as verified model evidence; inputs:
-        # 'Diagnostic screenshots:', directory.resolve().
+        # Print the absolute screenshot directory path immediately.
         print("Diagnostic screenshots:", directory.resolve(), flush=True)
-        # Learn: Define record_screenshot(step, screenshot). The body runs when called, not when defined.
+        # Define the callback that saves each model-input screenshot.
         def record_screenshot(step, screenshot):
-            # Learn: Enter (directory / f'step-{step:02d}.png').open('xb') as output. The context manager
-            # controls setup/exit; inspect it for the actual cleanup behavior.
+            # Open a numbered PNG file for binary writing; xb refuses to overwrite an existing file.
             with (directory / f"step-{step:02d}.png").open("xb") as output:
-                # Learn: Write this text or byte sequence to the already-open output on output; inputs:
-                # screenshot.png.
+                # Write the screenshot’s PNG bytes to the file.
                 output.write(screenshot.png)
     # Longer than the 180 s default: setup + optional viewer wait + up to 120 s of
     # agent time, which rate-limit pauses can fill. The agent deadline is unchanged.
-    # Learn: Enter open_e2b_desktop(grant, lifetime_seconds=DESKTOP_LIFETIME_SECONDS) as desktop. The
-    # context manager controls setup/exit; inspect it for the actual cleanup behavior.
+    # Create the permitted desktop, name it desktop, and clean it up when this block exits.
     with open_e2b_desktop(grant, lifetime_seconds=DESKTOP_LIFETIME_SECONDS) as desktop:
-        # Learn: Open the requested destination through the desktop adapter on desktop; inputs: SOURCE_URL.
+        # Navigate the remote browser to the source URL through the desktop adapter.
         desktop.navigate(SOURCE_URL)  # Authorized by the grant; blocked pages raise or become an observation.
         # The site can answer with an error page (e.g. "Too many requests"). Stop before
         # spending model calls rather than grading an agent on a page without the source.
-        # Learn: Take this branch only if desktop.page.locator(ARTICLE_SELECTOR).count() equals 0.
+        # Check whether the expected article element is missing.
         if desktop.page.locator(ARTICLE_SELECTOR).count() == 0:
-            # Learn: Raise SystemExit(f'SOURCE UNAVAILABLE: {SOURCE_URL} did not show the article (page
-            # title: {desktop.page.title()!r}). No model calls were m... to stop the normal path.
+            # Stop before calling the model if the source article did not load.
             raise SystemExit(f"SOURCE UNAVAILABLE: {SOURCE_URL} did not show the article "
-                             # Learn: Call desktop.page.title with no arguments.
+                             # Include the actual page title and explain that no model calls were made.
                              f"(page title: {desktop.page.title()!r}). No model calls were made.")
-        # Learn: Enter desktop.live_view() if args.watch else nullcontext() as viewer. The context manager
-        # controls setup/exit; inspect it for the actual cleanup behavior.
+        # Open a live viewer in watch mode; otherwise enter a do-nothing context.
         with desktop.live_view() if args.watch else nullcontext() as viewer:
-            # Learn: Take this branch only if args.watch.
+            # Run this block only when --watch was supplied.
             if args.watch:
-                # Learn: Display diagnostic/result text without treating it as verified model evidence;
-                # inputs: 'Local live viewer:', viewer.url.
+                # Print the local viewer URL immediately.
                 print("Local live viewer:", viewer.url, flush=True)
-                # Learn: Call webbrowser.open with the arguments shown.
+                # Open that viewer URL in the local browser.
                 webbrowser.open(viewer.url)
-                # Learn: Call wait_for_viewer with the arguments shown.
+                # Wait for the viewer connection and user confirmation before starting the agent.
                 wait_for_viewer(viewer)
-            # Learn: Set started to time.monotonic(); the monotonic timestamp used to measure elapsed time.
+            # Record a monotonic start time for measuring the agent’s duration.
             started = time.monotonic()
-            # Learn: Set result to run_vision_agent(f'You are viewing a Wikipedia article in Chrome.
-            # {QUESTION} Scroll as needed and read the value from the screen. Fi...; the operation outcome
-            # for subsequent checks or reporting.
+            # Run the agent with the following prompt, permissions, desktop, model, and limits.
             result = run_vision_agent(
-                # Learn: Supply literal text 'You are viewing a Wikipedia article in Chrome. '; adjacent
-                # string literals are concatenated without adding whitespace.
+                # Begin the prompt with the page context and the research question.
                 f"You are viewing a Wikipedia article in Chrome. {QUESTION} "
-                # Learn: Supply the next argument to run_vision_agent: "Scroll as needed and read the value
-                # from the screen. ".
+                # Continue the same prompt by asking the model to scroll and read the screen.
                 "Scroll as needed and read the value from the screen. "
-                # Learn: Supply the next argument to run_vision_agent: "Finish with only the value, no
-                # labels or explanation.",.
+                # Finish the prompt by requiring only the requested value as the answer.
                 "Finish with only the value, no labels or explanation.",
-                # Learn: Pass keyword max_steps = args.max_steps.
+                # Pass the permission grant, desktop, model adapter, and maximum decision count.
                 grant, desktop, model, max_steps=args.max_steps,
-                # Learn: Pass keyword on_screenshot = record_screenshot.
+                # Supply the optional screenshot saver and the final-answer length validator.
                 on_screenshot=record_screenshot, finish_validator=validate_short_answer,
-                # Learn: Pass keyword max_image_width = args.image_width.
+                # Limit screenshot width using the selected CLI setting.
                 max_image_width=args.image_width,
-                # Learn: Parameters: step is provided/defaulted by the caller; seconds is provided/defaulted
-                # by the caller. Type hints do not enforce types by themselves.
+                # Define a callback that records each retry wait and prints its duration.
                 on_rate_limit=lambda step, seconds: (rate_waits.append(seconds), print(
-                    # Learn: Pass keyword flush = True.
+                    # Print the step and wait time immediately; :.1f shows one decimal place.
                     f"Model provider rate limit at step {step}; waiting {seconds:.1f} s.", flush=True)))
-            # Learn: Set agent_seconds to round(time.monotonic() - started, 1).
+            # Calculate elapsed agent time and round it to one decimal place.
             agent_seconds = round(time.monotonic() - started, 1)
             # Grading evidence, gathered after the model finished and never shown to it.
-            # Learn: Set source to desktop.page.url.
+            # Read the browser’s final URL.
             source = desktop.page.url
-            # Learn: Set visible to the truth value of desktop.page.evaluate(VISIBLE_IN_VIEWPORT, EXPECTED).
+            # Run the fixed visibility check with EXPECTED as data and convert the result to a boolean.
             visible = bool(desktop.page.evaluate(VISIBLE_IN_VIEWPORT, EXPECTED))
-            # Learn: Set article to desktop.page.locator(ARTICLE_SELECTOR).
+            # Locate the article element for post-run grading.
             article = desktop.page.locator(ARTICLE_SELECTOR)
-            # Learn: Set page_text to article.inner_text(timeout=10000) when article.count(), otherwise ''.
+            # Read article text with a 10-second timeout, or use an empty string if no article exists.
             page_text = article.inner_text(timeout=10000) if article.count() else ""
-            # Learn: Set blocked to the number of items/characters in desktop.blocked_requests.
+            # Count the browser requests blocked by the desktop adapter.
             blocked = len(desktop.blocked_requests)
-    # Learn: Take this branch only if urlsplit(source).hostname does not equal host.
+    # Check whether the browser finished on a different hostname.
     if urlsplit(source).hostname != host:
-        # Learn: Raise SystemExit(f'FAIL: finished on an unexpected page: {source}') to stop the normal
-        # path.
+        # Stop with an error if the final hostname is unexpected.
         raise SystemExit(f"FAIL: finished on an unexpected page: {source}")
-    # Learn: Set (passed, reason) to grade(result.answer, EXPECTED, page_text, visible).
+    # Grade the answer and unpack the pass/fail boolean and explanation.
     passed, reason = grade(result.answer, EXPECTED, page_text, visible)
-    # Learn: Set tools_used to model_tools(result.transcript).
+    # Extract the tool names proposed in the transcript.
     tools_used = model_tools(result.transcript)
-    # Learn: Set trace to a list built from result.transcript by the comprehension.
+    # Copy each transcript entry’s kind and text into a list of dictionaries.
     trace = [{"kind": e.kind, "text": e.text} for e in result.transcript]
-    # Learn: Display diagnostic/result text without treating it as verified model evidence; inputs:
-    # 'Model:', model.model.
+    # Print the model name used for this run.
     print("Model:", model.model)
-    # Learn: Display diagnostic/result text without treating it as verified model evidence; inputs:
-    # 'Status:', result.status.
+    # Print the agent’s final status.
     print("Status:", result.status)
-    # Learn: Display diagnostic/result text without treating it as verified model evidence; inputs:
-    # 'Answer:', result.answer.
+    # Print the answer returned by the agent.
     print("Answer:", result.answer)
-    # Learn: Display diagnostic/result text without treating it as verified model evidence; inputs:
-    # 'Source:', source.
+    # Print the browser’s final URL as the source.
     print("Source:", source)
-    # Learn: Display diagnostic/result text without treating it as verified model evidence; inputs:
-    # 'Expected:', EXPECTED, '| visible on screen at finish:', visible.
+    # Print the correct value and whether it was on screen when the agent finished.
     print("Expected:", EXPECTED, "| visible on screen at finish:", visible)
-    # Learn: Display diagnostic/result text without treating it as verified model evidence; inputs: 'Model
-    # tools (evidence came only from screenshots):', tools_used.
+    # Print the model’s proposed tool names.
     print("Model tools (evidence came only from screenshots):", tools_used)
-    # Learn: Display diagnostic/result text without treating it as verified model evidence; inputs: "Model
-    # decisions (reasons are the model's own account, not verified):".
+    # Print a heading noting that model reasons are unverified.
     print("Model decisions (reasons are the model's own account, not verified):")
-    # Learn: Display diagnostic/result text without treating it as verified model evidence; inputs:
-    # '\n'.join(decision_lines(result.transcript)).
+    # Join the formatted decision lines with newlines and print them.
     print("\n".join(decision_lines(result.transcript)))
-    # Learn: Display diagnostic/result text without treating it as verified model evidence; inputs: 'Denied
-    # proposals:', the number of items/characters in result.denied, '| blocked browser requests:', blocked.
+    # Print the counts of denied proposals and blocked browser requests.
     print("Denied proposals:", len(result.denied), "| blocked browser requests:", blocked)
-    # Learn: Display diagnostic/result text without treating it as verified model evidence; inputs: an
-    # f-string that substitutes the expressions in {...} into the text.
+    # Print elapsed agent time and the number of rate-limit waits.
     print(f"Agent time: {agent_seconds} s (deadline 120 s) | rate-limit waits: {len(rate_waits)}"
-          # Learn: Call sum with the arguments shown.
+          # Continue the same output line with the sum of all wait durations.
           f" totalling {sum(rate_waits):.1f} s")
-    # Learn: Display diagnostic/result text without treating it as verified model evidence; inputs:
-    # 'Trace:', json.dumps(trace, indent=2).
+    # Print the transcript as indented JSON.
     print("Trace:", json.dumps(trace, indent=2))
-    # Learn: Take this branch only if directory is not None (no value).
+    # Save a report only if an output directory was created.
     if directory is not None:
-        # Learn: Set record to a new dictionary with keys 'model', 'image_width', 'status', 'answer',
-        # 'source', 'question', 'expected', 'visible_at_finish', 'page_contains_expected', 'model_....
+        # Start a report dictionary with the model name and screenshot width.
         record = {"model": model.model, "image_width": args.image_width,
-                  # Learn: Define this named mapping field: "status": result.status, "answer":
-                  # result.answer,. The key selects the schema/configuration value.
+                  # Include the final status and answer.
                   "status": result.status, "answer": result.answer,
-                  # Learn: Define this named mapping field: "source": source, "question": QUESTION,
-                  # "expected": EXPECTED,. The key selects the schema/configuration value.
+                  # Include the source URL, question, and expected answer.
                   "source": source, "question": QUESTION, "expected": EXPECTED,
-                  # Learn: Define this named mapping field: "visible_at_finish": visible,
-                  # "page_contains_expected": EXPECTED in page_text,. The key selects the
-                  # schema/configuration value.
+                  # Include whether the answer was on screen and present in the article text.
                   "visible_at_finish": visible, "page_contains_expected": EXPECTED in page_text,
-                  # Learn: Define this named mapping field: "model_tools": tools_used, "denied":
-                  # len(result.denied),. The key selects the schema/configuration value.
+                  # Include proposed tool names and the number of denied proposals.
                   "model_tools": tools_used, "denied": len(result.denied),
-                  # Learn: Define this named mapping field: "blocked_requests": blocked, "agent_seconds":
-                  # agent_seconds,. The key selects the schema/configuration value.
+                  # Include blocked-request count and elapsed agent time.
                   "blocked_requests": blocked, "agent_seconds": agent_seconds,
-                  # Learn: Define this named mapping field: "rate_limit_waits_seconds": rate_waits,
-                  # "result": reason, "trace": trace}. The key selects the schema/configuration value.
+                  # Include retry wait durations, grading explanation, and transcript.
                   "rate_limit_waits_seconds": rate_waits, "result": reason, "trace": trace}
-        # Learn: Write text to the selected file, replacing existing contents on directory / 'result.json';
-        # inputs: json.dumps(record, indent=2) plus '\n'.
+        # Write the report as indented JSON followed by a newline.
         (directory / "result.json").write_text(json.dumps(record, indent=2) + "\n")
-        # Learn: Display diagnostic/result text without treating it as verified model evidence; inputs:
-        # 'Saved result:', (directory / 'result.json').resolve().
+        # Print the absolute path of the saved report.
         print("Saved result:", (directory / "result.json").resolve())
-    # Learn: Take this branch only if result.status does not equal 'finished' OR not (passed).
+    # Check whether the agent failed to finish or the answer failed grading.
     if result.status != "finished" or not passed:
-        # Learn: Raise SystemExit(reason if result.status == 'finished' else f'FAIL: run ended with status
-        # {result.status}.') to stop the normal path.
+        # Exit with the grading explanation or the unfinished-run status.
         raise SystemExit(reason if result.status == "finished" else f"FAIL: run ended with status {result.status}.")
-    # Learn: Display diagnostic/result text without treating it as verified model evidence; inputs: an
-    # f-string that substitutes the expressions in {...} into the text.
+    # Print the success explanation and answer with its source URL.
     print(f"{reason}\nCited answer: {result.answer.strip()} [{source}]")
-    # Learn: Display diagnostic/result text without treating it as verified model evidence; inputs: 'Cleanup
-    # returned without exception; provider termination not independently checked.'.
+    # Report that cleanup completed without an exception, while termination remains unverified.
     print("Cleanup returned without exception; provider termination not independently checked.")
 
 
-# Learn: Take this branch only if __name__ equals '__main__'. The __main__ guard keeps imports from
-# launching the CLI.
+# Run the following block only when this file is executed directly, not imported.
 if __name__ == "__main__":
-    # Learn: Call main with no arguments.
+    # Start the demo.
     main()

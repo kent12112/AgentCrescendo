@@ -1,6 +1,6 @@
 # Current development status
 
-Updated: November 14, 2026, by Codex.
+Updated: November 15, 2026, by Codex.
 Implementation baseline: `584e662`.
 Current milestone: Week 1 — one useful, constrained desktop agent.
 
@@ -41,7 +41,7 @@ All tasks below are unassigned. Claim only the task you are actually starting.
 | --- | --- | --- | --- |
 | W1-1 | Diagnose the real noVNC connection; visually confirm the remote page renders and model actions are visible | Unassigned | Done for the fixture (F08): user saw the real desktop and the live scroll; see [viewer handoff](handoffs/2026-11-13-claude-w1-1-live-viewer.md) |
 | W1-2 | Inspect the screenshots delivered to the vision model and demonstrate correct observation, scrolling, and final answer | Unassigned | Fixture done (F07): one live pass with inspected PNGs, see [handoff](handoffs/2026-11-13-claude-w1-f07-model-scroll.md). Earlier wrong answer was `visual=51,174` (format check added); public-page case is W1-6 |
-| W1-3 | Finish controlled live network checks for private/backend destinations, redirects/subrequests, IPv6, and DNS behavior; document provider exceptions and limits | Unassigned | Open; preliminary live probes and local interception checks exist |
+| W1-3 | Finish controlled live network checks for private/backend destinations, redirects/subrequests, IPv6, and DNS behavior; document provider exceptions and limits | Unassigned | Open; preliminary live probes and local interception checks exist. IPv6 checked November 16: one live run, no guest IPv6 route. Redirects, DNS rebinding, subrequests remain |
 | W1-4 | Compare two model candidates on the same fixed research task; record configuration, correctness/citation support, cost, and latency | Unassigned | Open |
 | W1-5 | Record a cited research trace, provider termination evidence, and remaining limitations; reconcile README with implemented CLI demos and draft-only dashboard | Unassigned | Open |
 | W1-6 | Connect permitted public-page research to screenshot observation and model-selected scrolling; produce a cited answer while the user watches the same desktop (plan W1-F09) | Unassigned | Done (F09): user watched a live Wikipedia pass with a cited, on-screen-verified answer; see [W1-6 handoff](handoffs/2026-11-13-claude-w1-6-visual-research.md) |
@@ -51,7 +51,24 @@ on the assumption that Week 1's networking and live-view boundaries are resolved
 
 ## Active ownership
 
-No active implementation claims. Codex completed and released ANNOTATE on
+W1-3 / W1-F10 IPv6 probe completed locally and released by Claude on November 16,
+2026. Adds IPv6 probes and the unit-tested `evaluate_preflight()`; 252 Python tests
+passed. One user-run live pass: every IPv6 probe `ENETUNREACH` (no guest IPv6
+route; not a firewall rule). See the
+[IPv6 handoff](handoffs/2026-11-16-claude-w1-f10-ipv6-probe.md).
+
+COMMENT-CLARITY-ALL completed and released by Codex on November 15, 2026:
+updated annotations across maintained source, tests, scripts, frontend, and supported
+configuration; updated the reading guide. Code/configuration comparisons unchanged;
+239 Python tests, frontend typecheck, and production build passed. See
+[handoff](handoffs/2026-11-15-codex-all-comment-clarity.md).
+
+COMMENT-CLARITY completed and released by Codex on November 15, 2026:
+rewrote `scripts/e2b_visual_research_demo.py` comments as direct plain-English
+translations without Learn labels. Python AST unchanged; 13 existing demo tests
+passed. See [handoff](handoffs/2026-11-15-codex-comment-clarity.md).
+
+Previous status: No active implementation claims. Codex completed and released ANNOTATE on
 November 14, 2026: learning comments directly in source/tests/scripts and supported
 configuration, plus a [reading guide](learning/12-commented-source.md) covering
 strict JSON. Local checks: 239 Python tests, TypeScript/build, unchanged syntax

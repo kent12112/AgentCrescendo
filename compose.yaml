@@ -1,45 +1,45 @@
-# Learn: Define containerized processes for local development.
+# Define containerized processes for local development.
 services:
-  # Learn: Name the PostgreSQL service; commands such as docker compose up -d db select it.
+  # Name the PostgreSQL service; commands such as docker compose up -d db select it.
   db:
     # A managed local PostgreSQL process inside a container, not a database mock.
-    # Learn: Run the PostgreSQL 17 image; creating the container may download the image.
+    # Run the PostgreSQL 17 image; creating the container may download the image.
     image: postgres:17
-    # Learn: Provide initialization settings to the database image.
+    # Provide initialization settings to the database image.
     environment:
-      # Learn: Create the example local database user named crescendo on first initialization.
+      # Create the example local database user named crescendo on first initialization.
       POSTGRES_USER: crescendo
-      # Learn: Use the example local password for this loopback development database.
+      # Use the example local password for this loopback development database.
       POSTGRES_PASSWORD: crescendo
-      # Learn: Create the application database on first initialization.
+      # Create the application database on first initialization.
       POSTGRES_DB: crescendo
-    # Learn: Publish explicitly selected container ports to the host.
+    # Publish explicitly selected container ports to the host.
     ports:
       # host-address:host-port:container-port; loopback keeps it off the LAN.
-      # Learn: Bind host port 5432 on loopback only and forward to PostgreSQL port 5432 inside the
+      # Bind host port 5432 on loopback only and forward to PostgreSQL port 5432 inside the
       # container.
       - "127.0.0.1:5432:5432"
-    # Learn: Configure persistent storage mounts at service level or declare named storage at top level.
+    # Configure persistent storage mounts at service level or declare named storage at top level.
     volumes:
       # Named volume keeps rows when the container is stopped or recreated.
-      # Learn: Mount the named volume at the PostgreSQL data directory so container replacement
-      # preserves rows.
+      # Mount the named volume at the PostgreSQL data directory so container replacement preserves
+      # rows.
       - postgres_data:/var/lib/postgresql/data
-    # Learn: Define a readiness probe; a running process alone does not establish database readiness.
+    # Define a readiness probe; a running process alone does not establish database readiness.
     healthcheck:
       # Compose can wait for readiness instead of assuming "started" means ready.
-      # Learn: Ask PostgreSQL whether the configured local database accepts connections; this is not an
+      # Ask PostgreSQL whether the configured local database accepts connections; this is not an
       # application query test.
       test: ["CMD-SHELL", "pg_isready -U crescendo -d crescendo"]
-      # Learn: Repeat readiness checks every three seconds.
+      # Repeat readiness checks every three seconds.
       interval: 3s
-      # Learn: Allow at most three seconds per readiness probe.
+      # Allow at most three seconds per readiness probe.
       timeout: 3s
-      # Learn: Mark the service unhealthy after ten consecutive failed probes.
+      # Mark the service unhealthy after ten consecutive failed probes.
       retries: 10
 
-# Learn: Configure persistent storage mounts at service level or declare named storage at top level.
+# Configure persistent storage mounts at service level or declare named storage at top level.
 volumes:
-  # Learn: Declare the named persistent volume referenced by the database service.
+  # Declare the named persistent volume referenced by the database service.
   postgres_data:
 

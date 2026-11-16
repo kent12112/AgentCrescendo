@@ -1,70 +1,86 @@
-// Learn: Mark this module as a React client boundary so its components/hooks can use browser events and state.
+// Mark this module as a React client boundary so its components/hooks can use browser events and
+// state.
 "use client";
 
-// Learn: Import these module exports for use below: import { DraftList } from "./draft-list";. Named imports use braces; a default import has no braces.
+// Import { DraftList } from "./draft-list".
 import { DraftList } from "./draft-list";
-// Learn: Import these module exports for use below: import { useDrafts } from "./use-drafts";. Named imports use braces; a default import has no braces.
+// Import { useDrafts } from "./use-drafts".
 import { useDrafts } from "./use-drafts";
 
-// Learn: Declare this block-scoped binding: const examples = [. const prevents reassignment of the binding, not mutation of an object it references.
+// Define const examples = [
 const examples = [
-  // Learn: Supply this literal text value; literal task examples are only copied into the goal field when selected.
+  // Supply this literal text value; literal task examples are only copied into the goal field when
+  // selected.
   "Plan a weekend in Boston for two, under $600, with vegetarian food and no car.",
-  // Learn: Supply this literal text value; literal task examples are only copied into the goal field when selected.
+  // Supply this literal text value; literal task examples are only copied into the goal field when
+  // selected.
   "Compare three beginner cameras under $500. Include tradeoffs and source links.",
-  // Learn: Supply this literal text value; literal task examples are only copied into the goal field when selected.
+  // Supply this literal text value; literal task examples are only copied into the goal field when
+  // selected.
   "Find ideas for a rainy Saturday with friends in NYC, under $40 per person.",
-// Learn: Close the surrounding object, function, call, or type expression; delimiters determine which construct ends here.
 ];
 
-// Learn: Define a function/component: export default function Workspace() {. Its body executes when called/rendered.
+// Define export default function Workspace() {
 export default function Workspace() {
-  // Learn: Update the controlled goal field, either from typing, an example, or a successful save.
+  // Update the controlled goal field, either from typing, an example, or a successful save.
   const { goal, setGoal, constraints, setConstraints, workers, setWorkers, budget, setBudget,
-    // Learn: Continue this expression: runs, loading, saving, deleting, error, notice, loadRuns, deleteRun, createRun } = useDrafts();. Its braces/brackets keep it within the enclosing declaration or call.
+    // Continue with runs, loading, saving, deleting, error, notice, loadRuns, deleteRun, createRun
+    // } = useDrafts();
     runs, loading, saving, deleting, error, notice, loadRuns, deleteRun, createRun } = useDrafts();
 
-  // Learn: Return the JSX tree below; React turns these element descriptions into the rendered interface.
+  // Return the JSX tree below; React turns these element descriptions into the rendered interface.
   return (
-    // Learn JSX line 1: Render a layout/grouping container. className selects styles from globals.css.
-    // Learn JSX line 2: Render the workspace navigation sidebar. className selects styles from globals.css.
-    // Learn JSX line 3: Supply an accessible name for assistive technology: <a className="brand" href="/" aria-label="AgentCrescendo home"><span className="brandmark">≋</span> Agent<span>Crescendo</span></a>.
-    // Learn JSX line 4: Render a layout/grouping container. className selects styles from globals.css.
-    // Learn JSX line 5: Hide the purely decorative symbol from assistive technology while leaving it visible. <div className="nav-active"><span aria-hidden="true">◈</span> Task drafts</div>
-    // Learn JSX line 6: Render a layout/grouping container. className selects styles from globals.css.
-    // Learn JSX line 7: Close the aside element so subsequent content returns to its parent.
-    // Learn JSX line 9: Render the primary page content.
-    // Learn JSX line 10: Render the page header. className selects styles from globals.css.
-    // Learn JSX line 11: Render a layout/grouping container. className selects styles from globals.css.
-    // Learn JSX line 12: Render a layout/grouping container. className selects styles from globals.css.
-    // Learn JSX line 13: Render the page heading.
-    // Learn JSX line 14: Render a paragraph. className selects styles from globals.css.
-    // Learn JSX line 16: Render a labeled content section. className selects styles from globals.css.
-    // Learn JSX line 17: Connect form submission to createRun; that handler prevents page navigation and waits for confirmed persistence.
-    // Learn JSX line 18: Render an input label.
-    // Learn JSX line 19: Update controlled React state from the input event. Number(...) converts select string values to numeric draft limits. <textarea id="goal" required minLength={10} maxLength={4000} value={goal} onChange={event => setGoal(event.target.value)} placeholder="Plan, compare, research, or put something together…" />
-    // Learn JSX line 20: Existing JSX comment: it documents the UI without rendering visible text.
-    // Learn JSX line 21: Render an input label.
-    // Learn JSX line 22: Update controlled React state from the input event. Number(...) converts select string values to numeric draft limits. <textarea id="constraints" maxLength={1000} value={constraints} onChange={event => setConstraints(event.target.value)} placeholder="Budget, dates, must-haves, things to avoid…" />
-    // Learn JSX line 23: Render a layout/grouping container. className selects styles from globals.css.
-    // Learn JSX line 24: Render a layout/grouping container. className selects styles from globals.css.
-    // Learn JSX line 25: Update controlled React state from the input event. Number(...) converts select string values to numeric draft limits. <label>Workers <select value={workers} onChange={event => setWorkers(Number(event.target.value))}><option value={1}>1 worker</option><option value={2}>2 workers</option><option value={3}>3 workers</option></select></labe
-    // Learn JSX line 26: Update controlled React state from the input event. Number(...) converts select string values to numeric draft limits. <label>Model budget <select value={budget} onChange={event => setBudget(Number(event.target.value))}><option value={50}>$0.50</option><option value={100}>$1.00</option><option value={200}>$2.00</option><option value={500
-    // Learn JSX line 27: Render inline text or a decorative/status marker. className selects styles from globals.css.
-    // Learn JSX line 28: Close the div element so subsequent content returns to its parent.
-    // Learn JSX line 29: Disable this control while the indicated operation/input condition requires it, preventing duplicate UI actions. <button className="primary" type="submit" disabled={saving || goal.trim().length < 10}>{saving ? "Saving…" : "Save task draft"}<span aria-hidden="true">↗</span></button>
-    // Learn JSX line 30: Close the div element so subsequent content returns to its parent.
-    // Learn JSX line 31: Close the form element so subsequent content returns to its parent.
-    // Learn JSX line 32: Close the section element so subsequent content returns to its parent.
-    // Learn JSX line 34: Map this array into UI elements; keys identify the elements across renders.
-    // Learn JSX line 36: Hide the purely decorative symbol from assistive technology while leaving it visible. <div className="development-note"><span className="note-icon" aria-hidden="true">i</span><p><strong>Draft mode</strong> Your brief is saved to the local database. Desktop agents, execution, and automatic 24-hour cleanup
-    // Learn JSX line 38: Register a click callback; it executes on user interaction, not while rendering. void discards the Promise after the handler handles errors. {error && <div className="error" role="alert">{error} <button type="button" onClick={() => void loadRuns()}>Retry connection</button></div>}
-    // Learn JSX line 39: Announce operation notices politely through the live status region.
-    // Learn JSX line 41: Render the saved-drafts component with state and callbacks supplied as props. Expressions in braces read current props/state.
-    // Learn JSX line 42: Render the page footer.
-    // Learn JSX line 43: Close the div element so subsequent content returns to its parent.
-    // Learn JSX line 44: Close the main element so subsequent content returns to its parent.
-    // Learn JSX line 45: Close the div element so subsequent content returns to its parent.
+    // JSX line 1: Render a layout/grouping container. className selects styles from globals.css.
+    // JSX line 2: Render the workspace navigation sidebar. className selects styles from
+    // globals.css.
+    // JSX line 3: Supply an accessible name for assistive technology: <a className="brand" href="/"
+    // aria-label="AgentCrescendo home"><span className="brandmark">≋</span>
+    // Agent<span>Crescendo</span></a>.
+    // JSX line 4: Render a layout/grouping container. className selects styles from globals.css.
+    // JSX line 5: Hide the purely decorative symbol from assistive technology while leaving it
+    // visible. <div className="nav-active"><span aria-hidden="true">◈</span> Task drafts</div>
+    // JSX line 6: Render a layout/grouping container. className selects styles from globals.css.
+    // JSX line 7: Close the aside element so subsequent content returns to its parent.
+    // JSX line 9: Render the primary page content.
+    // JSX line 10: Render the page header. className selects styles from globals.css.
+    // JSX line 11: Render a layout/grouping container. className selects styles from globals.css.
+    // JSX line 12: Render a layout/grouping container. className selects styles from globals.css.
+    // JSX line 13: Render the page heading.
+    // JSX line 14: Render a paragraph. className selects styles from globals.css.
+    // JSX line 16: Render a labeled content section. className selects styles from globals.css.
+    // JSX line 17: Connect form submission to createRun; that handler prevents page navigation and
+    // waits for confirmed persistence.
+    // JSX line 18: Render an input label.
+    // JSX line 20: Existing JSX comment: it documents the UI without rendering visible text.
+    // JSX line 21: Render an input label.
+    // JSX line 23: Render a layout/grouping container. className selects styles from globals.css.
+    // JSX line 24: Render a layout/grouping container. className selects styles from globals.css.
+    // JSX line 27: Render inline text or a decorative/status marker. className selects styles from
+    // globals.css.
+    // JSX line 28: Close the div element so subsequent content returns to its parent.
+    // JSX line 29: Disable this control while the indicated operation/input condition requires it,
+    // preventing duplicate UI actions. <button className="primary" type="submit" disabled={saving
+    // || goal.trim().length < 10}>{saving ? "Saving…" : "Save task draft"}<span
+    // aria-hidden="true">↗</span></button>
+    // JSX line 30: Close the div element so subsequent content returns to its parent.
+    // JSX line 31: Close the form element so subsequent content returns to its parent.
+    // JSX line 32: Close the section element so subsequent content returns to its parent.
+    // JSX line 34: Map this array into UI elements; keys identify the elements across renders.
+    // JSX line 36: Hide the purely decorative symbol from assistive technology while leaving it
+    // visible. <div className="development-note"><span className="note-icon"
+    // aria-hidden="true">i</span><p><strong>Draft mode</strong> Your brief is saved to the local
+    // database. Desktop agents, execution, and automatic 24-hour cleanup
+    // JSX line 38: Register a click callback; it executes on user interaction, not while rendering.
+    // void discards the Promise after the handler handles errors. {error && <div className="error"
+    // role="alert">{error} <button type="button" onClick={() => void loadRuns()}>Retry
+    // connection</button></div>}
+    // JSX line 39: Announce operation notices politely through the live status region.
+    // JSX line 41: Render the saved-drafts component with state and callbacks supplied as props.
+    // Expressions in braces read current props/state.
+    // JSX line 42: Render the page footer.
+    // JSX line 43: Close the div element so subsequent content returns to its parent.
+    // JSX line 44: Close the main element so subsequent content returns to its parent.
+    // JSX line 45: Close the div element so subsequent content returns to its parent.
     <div className="workspace">
       <aside className="sidebar">
         <a className="brand" href="/" aria-label="AgentCrescendo home"><span className="brandmark">≋</span> Agent<span>Crescendo</span></a>
@@ -110,7 +126,5 @@ export default function Workspace() {
         </div>
       </main>
     </div>
-  // Learn: Close the surrounding object, function, call, or type expression; delimiters determine which construct ends here.
   );
-// Learn: Close the surrounding object, function, call, or type expression; delimiters determine which construct ends here.
 }

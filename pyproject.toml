@@ -1,59 +1,57 @@
-# Learn: Configure the tools that build/install this Python distribution.
+# Configure the tools that build/install this Python distribution.
 [build-system]
-# Learn: Install setuptools version 75 or newer into the isolated build environment.
+# Install setuptools version 75 or newer into the isolated build environment.
 requires = ["setuptools>=75"]
-# Learn: Use the setuptools PEP 517 build implementation.
+# Use the setuptools PEP 517 build implementation.
 build-backend = "setuptools.build_meta"
 
-# Learn: Declare package metadata and required runtime dependencies.
+# Declare package metadata and required runtime dependencies.
 [project]
-# Learn: The distribution/install name; import names remain crescendo_api, crescendo_agent, and
+# The distribution/install name; import names remain crescendo_api, crescendo_agent, and
 # crescendo_security.
 name = "agent-crescendo-api"
-# Learn: The current distribution version; this is separate from dependency versions.
+# The current distribution version; this is separate from dependency versions.
 version = "0.1.0"
-# Learn: A short description shown by packaging tools.
+# A short description shown by packaging tools.
 description = "Local control API for AgentCrescendo"
-# Learn: Require Python 3.11 or newer so the syntax and runtime APIs used here are supported.
+# Require Python 3.11 or newer so the syntax and runtime APIs used here are supported.
 requires-python = ">=3.11"
-# Learn: Begin the mandatory dependency list; normal installation includes these packages.
+# Begin the mandatory dependency list; normal installation includes these packages.
 dependencies = [
-  # Learn: FastAPI serves schema-validated HTTP routes; permit compatible releases from 0.115 up to, but
+  # FastAPI serves schema-validated HTTP routes; permit compatible releases from 0.115 up to, but
   # excluding, 1.
   "fastapi>=0.115,<1",
-  # Learn: Uvicorn hosts the ASGI API on the configured address and port.
+  # Uvicorn hosts the ASGI API on the configured address and port.
   "uvicorn>=0.34,<1",
-  # Learn: Load/validate environment settings with the Pydantic 2 settings integration.
+  # Load/validate environment settings with the Pydantic 2 settings integration.
   "pydantic-settings>=2.7,<3",
-  # Learn: SQLAlchemy maps Python objects to relational rows and executes explicit transactions.
+  # SQLAlchemy maps Python objects to relational rows and executes explicit transactions.
   "sqlalchemy>=2.0,<3",
-  # Learn: The PostgreSQL driver; the binary extra provides its prebuilt implementation.
+  # The PostgreSQL driver; the binary extra provides its prebuilt implementation.
   "psycopg[binary]>=3.2,<4",
-  # Learn: Alembic applies explicit versioned database migrations.
+  # Alembic applies explicit versioned database migrations.
   "alembic>=1.14,<2",
-# Learn: Close the dependency array; commas separate package requirements.
 ]
 
-# Learn: Define opt-in dependency groups (extras), keeping paid-provider integrations optional.
+# Define opt-in dependency groups (extras), keeping paid-provider integrations optional.
 [project.optional-dependencies]
-# Learn: The desktop extra supplies E2B, Playwright, HTTP/WebSocket clients, and Pillow screenshot
+# The desktop extra supplies E2B, Playwright, HTTP/WebSocket clients, and Pillow screenshot
 # resizing.
 e2b = ["e2b-desktop>=2,<3", "playwright>=1.49,<2", "httpx>=0.28,<1", "websockets>=15,<17", "pillow>=10,<14"]
-# Learn: The model-provider extra installs the Groq SDK.
+# The model-provider extra installs the Groq SDK.
 groq = ["groq>=0.31,<1"]
-# Learn: The development extra supplies pytest and the HTTP client used by local API tests.
+# The development extra supplies pytest and the HTTP client used by local API tests.
 dev = ["pytest>=8,<10", "httpx>=0.28,<1"]
 
-# Learn: Configure discovery of the three importable Python packages in this repository.
+# Configure discovery of the three importable Python packages in this repository.
 [tool.setuptools.packages.find]
-# Learn: Search these source roots; tests and scripts are not additional installed packages.
+# Search these source roots; tests and scripts are not additional installed packages.
 where = ["services/api", "packages/agent_runtime", "packages/security"]
-# Learn: Include package names matching these prefixes, including the newly split route modules.
+# Include package names matching these prefixes, including the newly split route modules.
 include = ["crescendo_api*", "crescendo_agent*", "crescendo_security*"]
 
-# Learn: Configure pytest when invoked from the repository root.
+# Configure pytest when invoked from the repository root.
 [tool.pytest.ini_options]
-# Learn: Discover the API, security, and runtime tests; smoke scripts run only when explicitly
-# requested.
+# Discover the API, security, and runtime tests; smoke scripts run only when explicitly requested.
 testpaths = ["services/api/tests", "packages/security/tests", "packages/agent_runtime/tests"]
 

@@ -1,30 +1,24 @@
 # Reading the commented source
 
-The current executable source files now include `Learn` comments. These explain
-syntax and purpose without changing the expressions being executed. The comments
-are learning aids; the implementation, tests, and observed runtime results remain
-the evidence for behavior.
+The maintained source, tests, scripts, and supported configuration contain plain-English
+comments translating the adjacent code. Comments describe what an operation does;
+the implementation, tests, and observed runtime results remain the evidence for behavior.
 
 ## How the annotations work
 
-- Python: the comment immediately before a statement explains that statement.
-  Continuation lines explain parameters, arguments, collection entries, or closing
-  delimiters. Existing comments and docstrings remain intact. Blank lines only
-  separate ideas and do not need explanations.
-- Multi-line strings: `Learn string line N` explains line N of the literal content,
-  counting from immediately after the opening triple quote. The notes sit before
-  the string, because comments inserted inside it would change prompts, fixture
-  pages, JavaScript expressions, or programs executed on E2B.
-- TypeScript: `Learn` comments explain declarations, guards, state setters, and
-  requests. `Learn JSX line N` refers to line N of the JSX tree immediately below
-  the explanation block, including blank lines in the count. Notes stay outside
-  that tree so they cannot accidentally render as text or break JSX syntax.
-- CSS, TOML, YAML, INI, and the migration template use their supported comment
-  syntax. CSS rules explain the selector and each declaration on that line.
-- JSON cannot contain comments. The two application JSON files are explained
-  line by line below. Dependency lockfiles, installed packages, build output,
-  private environment files, generated `next-env.d.ts`, and historical annotated
-  copies are excluded. Generated files should be read through their inputs.
+- Python comments translate the following statement or argument. Structural closing
+  delimiters and docstrings do not need a second narration. Existing explanatory
+  comments and executable strings are preserved.
+- Embedded programs and prompts use `string line N` notes outside the literal,
+  counting from immediately after the opening triple quote. Keeping notes outside
+  preserves the exact text sent to models, browsers, or remote desktops.
+- TypeScript comments explain declarations, conditions, state updates, and requests.
+  `JSX line N` refers to line N of the JSX tree below, including blank lines.
+  These notes stay outside the tree so they do not render in the interface.
+- CSS, TOML, YAML, INI, and migration templates use their supported comment syntax.
+- JSON cannot contain comments. The application JSON files are explained line by
+  line below. Lockfiles, dependencies, build output, private environment files,
+  generated `next-env.d.ts`, and historical reading copies are excluded.
 
 ## Read one execution path at a time
 

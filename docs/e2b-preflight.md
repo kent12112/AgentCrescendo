@@ -47,6 +47,19 @@ Expected results:
 | Unlisted example.com HTTPS | `false` |
 | Metadata IP TCP port 80 | May be `true`: sandbox-local MMDS exception |
 | Private IP TCP port 80 | `false` |
+| Public IPv6 `2606:4700:4700::1111` TCP 443 | `false` (added November 16, 2026) |
+| Private IPv6 `fd00::1` TCP 80 | `false` (added November 16, 2026) |
+| Wikipedia's IPv6 (AAAA) address TCP 443 | Either: informational |
+
+Why IPv6: `deny_out` is `0.0.0.0/0`, an IPv4 range. Nothing yet shows whether
+IPv6 traffic is denied, has no route at all, or passes. TCP probes now record an
+`error` name: `ENETUNREACH` means no IPv6 route, `TimeoutError` usually means
+dropped packets, `ECONNREFUSED` means something answered. All count as blocked,
+but they mean different things, so record which one appears.
+
+`evaluate_preflight()` holds the pass/fail rules (unit tested); the script prints
+raw results first, then notes, then exits nonzero if any rule failed. A missing or
+malformed probe result is a failure, not a pass.
 
 The IP probes open TCP connections only; they do not request metadata or read
 credentials. An HTTP error such as 403 still counts as reachable: the network
@@ -75,7 +88,8 @@ routing problem. These probes are preliminary evidence, not proof of firewall
 enforcement. Loopback inside the guest is the guest itself, not your Mac's backend.
 
 Next checks need a controlled reachable destination, redirects, DNS rebinding,
-IPv6, browser subrequests, and authenticated live-view access. E2B documents that
+browser subrequests, and authenticated live-view access. IPv6: one live run
+(November 16, 2026) found no guest IPv6 route; see the learning record below. E2B documents that
 allow rules take precedence over deny rules; domain resolution and shared IPs
 need verification before claiming exact hostname isolation at the network layer.
 Only after reviewing these results should we wire a browser into `Desktop`.
@@ -93,3 +107,19 @@ exception investigated against upstream source and contributor responses. No sec
 cloud run performed.
 Tradeoff: a small diagnostic step delays live browsing but makes network failures
 easier to distinguish from model and browser failures.
+
+IPv6 addition (November 16, 2026). Decision: measure IPv6 under the existing
+IPv4-only deny rule before changing configuration, so the result shows today's
+real boundary. Prediction: both IPv6 literals unreachable, most likely
+`ENETUNREACH` (no IPv6 route). If either connects, browsing stays disabled and
+the next step is testing `"::/0"` in `deny_out`. Offline result: 18 preflight tests
+pass; the probe helper returned `ECONNREFUSED` for closed local IPv4/IPv6 ports.
+Live result (user-run, November 16, 2026, one run): passed. Wikipedia HTTP 200;
+example.com unreachable; metadata TCP reachable (MMDS note); private IPv4
+`TimeoutError`; public IPv6, private IPv6, and Wikipedia over IPv6 all
+`ENETUNREACH`. Interpretation: the guest had no IPv6 route at all, so IPv6 was not
+an egress path in this run. That is absence of a route, not a firewall rule: if
+E2B later enables guest IPv6, the IPv4-only `0.0.0.0/0` deny may not cover it.
+Rerun this probe after SDK or provider changes; whether `deny_out` accepts
+`"::/0"` is unverified. The private IPv4 timeout (not refusal) is consistent with
+dropped packets but does not by itself prove firewall enforcement.

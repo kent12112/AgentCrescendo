@@ -1,124 +1,120 @@
-# Learn: From contextlib, import contextmanager (turns a generator into a with-block resource lifetime).
+# Import from contextlib: contextmanager (turns a generator into a with-block resource lifetime).
 from contextlib import contextmanager
-# Learn: Import json: encodes/decodes JSON for tool arguments, transcripts, or HTTP payloads.
+# Import json: encodes/decodes JSON for tool arguments, transcripts, or HTTP payloads.
 import json
-# Learn: From pathlib, import Path (represents filesystem paths and explicit file operations).
+# Import from pathlib: Path (represents filesystem paths and explicit file operations).
 from pathlib import Path
-# Learn: Import runpy: use this module through its namespace.
+# Import runpy: use this module through its namespace.
 import runpy
-# Learn: Import sys: provides process details and standard input/output streams.
+# Import sys: provides process details and standard input/output streams.
 import sys
-# Learn: From types, import SimpleNamespace (builds a small object with named attributes for test fixtures).
+# Import from types: SimpleNamespace (builds a small object with named attributes for test
+# fixtures).
 from types import SimpleNamespace
 
-# Learn: Import pytest: provides test discovery, fixtures, parametrization, and exception assertions.
+# Import pytest: provides test discovery, fixtures, parametrization, and exception assertions.
 import pytest
 
-# Learn: From crescendo_agent.model, import Entry (represents one typed transcript item sent to the model).
+# Import from crescendo_agent.model: Entry (represents one typed transcript item sent to the model).
 from crescendo_agent.model import Entry
 
 
-# Learn: Run this test once per listed input case, keeping the same assertions for each case.
+# Run this test once per listed input case, keeping the same assertions for each case.
 @pytest.mark.parametrize("trace", [False, True])
-# Learn: Test demo trace is opt in ordered and printed after cleanup. pytest supplies named fixtures and
-# checks assertions below.
+# Define test_demo_trace_is_opt_in_ordered_and_printed_after_cleanup with parameters monkeypatch,
+# capsys, trace.
 def test_demo_trace_is_opt_in_ordered_and_printed_after_cleanup(monkeypatch, capsys, trace):
-    # Learn: Temporarily set an environment variable for this test on monkeypatch; inputs: 'E2B_API_KEY',
-    # 'offline-e2b-secret'.
+    # Call monkeypatch.setenv with 'E2B_API_KEY', 'offline-e2b-secret'.
     monkeypatch.setenv("E2B_API_KEY", "offline-e2b-secret")
-    # Learn: Temporarily set an environment variable for this test on monkeypatch; inputs: 'GROQ_API_KEY',
-    # 'offline-groq-secret'.
+    # Call monkeypatch.setenv with 'GROQ_API_KEY', 'offline-groq-secret'.
     monkeypatch.setenv("GROQ_API_KEY", "offline-groq-secret")
-    # Learn: Call monkeypatch.setattr with the arguments shown.
+    # Call monkeypatch.setattr with sys, 'argv', ['groq_e2b_demo.py', *(['--trace'] if trace else
+    # [])].
     monkeypatch.setattr(sys, "argv", ["groq_e2b_demo.py", *(["--trace"] if trace else [])])
-    # Learn: Set entries to a new list containing Entry('goal', 'Research Boston'), Entry('observation',
-    # 'Page text\n\x1b[31muntrusted\rtext'), Entry('action', 'navigate https://forb....
+    # Build entries from the entries below.
     entries = [
-        # Learn: Call Entry with the arguments shown.
+        # Call Entry with the arguments shown.
         Entry("goal", "Research Boston"),
-        # Learn: Call Entry with the arguments shown.
+        # Call Entry with the arguments shown.
         Entry("observation", "Page text\n\x1b[31muntrusted\rtext"),
-        # Learn: Call Entry with the arguments shown.
+        # Call Entry with the arguments shown.
         Entry("action", "navigate https://forbidden.example/"),
-        # Learn: Call Entry with the arguments shown.
+        # Call Entry with the arguments shown.
         Entry("denied", "Host not permitted"),
-    # Learn: Close this list literal; delimiters group the values into one object.
     ]
-    # Learn: Set result to SimpleNamespace(status='step_limit', answer=None, sources=[], denied=[1],
-    # transcript=entries); the operation outcome for subsequent checks or reporting.
+    # Set result to SimpleNamespace(status='step_limit', answer=None, sources=[], denied=[1],
+    # transcript=entries).
     result = SimpleNamespace(status="step_limit", answer=None, sources=[], denied=[1], transcript=entries)
 
-    # Learn: Wrap the generator as a context manager: yield enters the with-block and exit resumes cleanup.
+    # Wrap the generator as a context manager: yield enters the with-block and exit resumes cleanup.
     @contextmanager
-    # Learn: Define fake_desktop(grant). The body runs when called, not when defined.
+    # Define fake_desktop with parameters grant.
     def fake_desktop(grant):
-        # Learn: Try the following operations; matching except clauses handle failures. The finally block
+        # Try the following operations; matching except clauses handle failures. The finally block
         # runs on every exit.
         try:
-            # Learn: Yield SimpleNamespace(visited=[], blocked_requests=[]) to the with-block/request;
-            # resume here for cleanup afterward.
+            # Give SimpleNamespace(visited=[], blocked_requests=[]) to the caller and pause here
+            # until execution resumes.
             yield SimpleNamespace(visited=[], blocked_requests=[])
-        # Learn: Always run cleanup, whether the operation succeeds, returns, or raises.
+        # Always run cleanup, whether the operation succeeds, returns, or raises.
         finally:
-            # Learn: Display diagnostic/result text without treating it as verified model evidence; inputs:
-            # 'DESKTOP CLEANED UP'.
+            # Print 'DESKTOP CLEANED UP'.
             print("DESKTOP CLEANED UP")
 
-    # Learn: Call monkeypatch.setattr with the arguments shown.
+    # Call monkeypatch.setattr with 'crescendo_agent.e2b_desktop.open_e2b_desktop', fake_desktop.
     monkeypatch.setattr("crescendo_agent.e2b_desktop.open_e2b_desktop", fake_desktop)
-    # Learn: Call monkeypatch.setattr with the arguments shown.
+    # Call monkeypatch.setattr with 'crescendo_agent.groq_model.GroqModel', a function that returns
+    # SimpleNamespace(model=name) when called.
     monkeypatch.setattr("crescendo_agent.groq_model.GroqModel", lambda name: SimpleNamespace(model=name))
-    # Learn: Call monkeypatch.setattr with the arguments shown.
+    # Call monkeypatch.setattr with 'crescendo_agent.loop.run_agent', a function that returns result
+    # when called.
     monkeypatch.setattr("crescendo_agent.loop.run_agent", lambda *args, **kwargs: result)
-    # Learn: Set script to Path(__file__).resolve().parents[3] divided by 'scripts' divided by
+    # Set script to Path(__file__).resolve().parents[3] divided by 'scripts' divided by
     # 'groq_e2b_demo.py'.
     script = Path(__file__).resolve().parents[3] / "scripts" / "groq_e2b_demo.py"
-    # Learn: Call runpy.run_path with the arguments shown.
+    # Call runpy.run_path with script converted to a string.
     runpy.run_path(str(script), run_name="__main__")
-    # Learn: Set output to capsys.readouterr().out; the destination stream for the generated bytes or text.
+    # Set output to capsys.readouterr().out.
     output = capsys.readouterr().out
 
-    # Learn: Assert that 'Status: step_limit' is in output. If false, this check fails with AssertionError.
+    # Assert that 'Status: step_limit' is in output. If false, this check fails with AssertionError.
     assert "Status: step_limit" in output
-    # Learn: Assert that 'offline-e2b-secret' is not in output. If false, this check fails with
+    # Assert that 'offline-e2b-secret' is not in output. If false, this check fails with
     # AssertionError.
     assert "offline-e2b-secret" not in output
-    # Learn: Assert that 'offline-groq-secret' is not in output. If false, this check fails with
+    # Assert that 'offline-groq-secret' is not in output. If false, this check fails with
     # AssertionError.
     assert "offline-groq-secret" not in output
-    # Learn: Set marker to 'Recorded trace (observations are untrusted; actions are proposals):\n'.
+    # Set marker to 'Recorded trace (observations are untrusted; actions are proposals):\n'.
     marker = "Recorded trace (observations are untrusted; actions are proposals):\n"
-    # Learn: Take this branch only if trace.
+    # Check whether trace.
     if trace:
-        # Learn: Assert that output.index('DESKTOP CLEANED UP') is less than output.index(marker). If false,
-        # this check fails with AssertionError.
+        # Assert that output.index('DESKTOP CLEANED UP') is less than output.index(marker). If
+        # false, this check fails with AssertionError.
         assert output.index("DESKTOP CLEANED UP") < output.index(marker)
-        # Learn: Set data to json.loads(output.split(marker, 1)[1]); the decoded response or bytes being
-        # processed. Decode JSON text; malformed input raises instead of becoming trusted arguments.
+        # Set data to json.loads(output.split(marker, 1)[1]).
         data = json.loads(output.split(marker, 1)[1])
-        # Learn: Assert that data['status'] equals 'step_limit'. If false, this check fails with
+        # Assert that data['status'] equals 'step_limit'. If false, this check fails with
         # AssertionError.
         assert data["status"] == "step_limit"
-        # Learn: Assert that data['model']. If false, this check fails with AssertionError.
+        # Assert that data['model']. If false, this check fails with AssertionError.
         assert data["model"]
-        # Learn: Assert that data['entries'] equals a list built from enumerate(entries, start=1) by the
+        # Assert that data['entries'] equals a list built from enumerate(entries, start=1) by the
         # comprehension. If false, this check fails with AssertionError.
         assert data["entries"] == [
-            # Learn: Continue the expression {"index": i, "kind": e.kind, "text": e.text}; brackets keep it
+            # Continue the expression {"index": i, "kind": e.kind, "text": e.text}; brackets keep it
             # part of the statement above.
             {"index": i, "kind": e.kind, "text": e.text}
-            # Learn: Pass keyword start = 1.
+            # Pass keyword start = 1.
             for i, e in enumerate(entries, start=1)
-        # Learn: Close the multi-line expression; indentation inside brackets is for readability, not a new
-        # block.
         ]
-        # Learn: Assert that '\x1b' is not in output. If false, this check fails with AssertionError.
+        # Assert that '\x1b' is not in output. If false, this check fails with AssertionError.
         assert "\x1b" not in output
-        # Learn: Assert that '\\u001b' is in output. If false, this check fails with AssertionError.
+        # Assert that '\\u001b' is in output. If false, this check fails with AssertionError.
         assert "\\u001b" in output
-    # Learn: Run this alternative only when the preceding conditional did not select its first branch.
+    # Run this alternative only when the preceding conditional did not select its first branch.
     else:
-        # Learn: Assert that marker is not in output. If false, this check fails with AssertionError.
+        # Assert that marker is not in output. If false, this check fails with AssertionError.
         assert marker not in output
-        # Learn: Assert that 'Page text' is not in output. If false, this check fails with AssertionError.
+        # Assert that 'Page text' is not in output. If false, this check fails with AssertionError.
         assert "Page text" not in output

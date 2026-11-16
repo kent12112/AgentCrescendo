@@ -1,316 +1,266 @@
-/* Learn: Import Tailwind styles before the application overrides below. */
+/* Import Tailwind styles before the application overrides below. */
 @import "tailwindcss";
 
-/* Learn: Style :root. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. --ink=#222b28 sets shared main text color. --muted=#6a756f sets shared secondary
-text color. --green=#245f49 sets shared action/accent color. --line=#e2e6df sets shared divider color.
---paper=#f8f9f5 sets shared page background. */
+/* Style :root. --ink=#222b28 sets shared main text color. --muted=#6a756f sets shared secondary
+   text color. --green=#245f49 sets shared action/accent color. --line=#e2e6df sets shared divider
+   color. --paper=#f8f9f5 sets shared page background. */
 :root { --ink: #222b28; --muted: #6a756f; --green: #245f49; --line: #e2e6df; --paper: #f8f9f5; }
-/* Learn: Style *. box-sizing=border-box sets whether width/height include padding and borders. */
+/* Style *. box-sizing=border-box sets whether width/height include padding and borders. */
 * { box-sizing: border-box; }
-/* Learn: Style body. margin=0 sets outside spacing (top/right/bottom/left order). color=var(--ink) sets
-foreground/text color. background=var(--paper) sets element background. font-family=Arial, Helvetica,
-sans-serif sets font fallback order. font-size=14px sets text size. */
+/* Style body. margin=0 sets outside spacing (top/right/bottom/left order). color=var(--ink) sets
+   foreground/text color. background=var(--paper) sets element background. font-family=Arial,
+   Helvetica, sans-serif sets font fallback order. font-size=14px sets text size. */
 body { margin: 0; color: var(--ink); background: var(--paper); font-family: Arial, Helvetica, sans-serif; font-size: 14px; }
-/* Learn: Style button, textarea, select. font=inherit sets font settings inherited together. */
+/* Style button, textarea, select. font=inherit sets font settings inherited together. */
 button, textarea, select { font: inherit; }
-/* Learn: Style button, select. cursor=pointer sets pointer appearance. */
+/* Style button, select. cursor=pointer sets pointer appearance. */
 button, select { cursor: pointer; }
-/* Learn: Style button:disabled. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. cursor=not-allowed sets pointer appearance. opacity=.5 sets element transparency. */
+/* Style button:disabled. cursor=not-allowed sets pointer appearance. opacity=.5 sets element
+   transparency. */
 button:disabled { cursor: not-allowed; opacity: .5; }
-/* Learn: Style button, a, textarea, select. outline-offset=4px sets distance between focus outline and
-element. */
+/* Style button, a, textarea, select. outline-offset=4px sets distance between focus outline and
+   element. */
 button, a, textarea, select { outline-offset: 4px; }
-/* Learn: Style button:focus-visible, a:focus-visible, textarea:focus-visible, select:focus-visible. A
-class selector starts with ., > means direct child, and : selects a state/pseudo-class. outline=2px
-solid var(--green) sets keyboard focus outline. */
+/* Style button:focus-visible, a:focus-visible, textarea:focus-visible, select:focus-visible.
+   outline=2px solid var(--green) sets keyboard focus outline. */
 button:focus-visible, a:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--green); }
-/* Learn: Style .workspace. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. display=flex sets layout mode. min-height=100vh sets minimum element height. */
+/* Style .workspace. display=flex sets layout mode. min-height=100vh sets minimum element height. */
 .workspace { display: flex; min-height: 100vh; }
-/* Learn: Style .sidebar. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. width=252px sets element width. background=#f0f3ec sets element background.
-border-right=1px solid var(--line) sets right divider. padding=32px 22px sets inside spacing
-(top/right/bottom/left order). display=flex sets layout mode. flex-direction=column sets main axis of
-flex layout. flex-shrink=0 sets how much this flex item may shrink. */
+/* Style .sidebar. width=252px sets element width. background=#f0f3ec sets element background.
+   border-right=1px solid var(--line) sets right divider. padding=32px 22px sets inside spacing
+   (top/right/bottom/left order). display=flex sets layout mode. flex-direction=column sets main
+   axis of flex layout. flex-shrink=0 sets how much this flex item may shrink. */
 .sidebar { width: 252px; background: #f0f3ec; border-right: 1px solid var(--line); padding: 32px 22px; display: flex; flex-direction: column; flex-shrink: 0; }
-/* Learn: Style .brand. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. display=flex sets layout mode. align-items=center sets cross-axis alignment in flex
-layout. gap=0 sets spacing between flex items. font-size=17px sets text size. letter-spacing=-.6px sets
-spacing between characters. text-decoration=none sets link/text decoration. color=var(--ink) sets
-foreground/text color. font-weight=700 sets text weight. */
+/* Style .brand. display=flex sets layout mode. align-items=center sets cross-axis alignment in
+   flex layout. gap=0 sets spacing between flex items. font-size=17px sets text size.
+   letter-spacing=-.6px sets spacing between characters. text-decoration=none sets link/text
+   decoration. color=var(--ink) sets foreground/text color. font-weight=700 sets text weight. */
 .brand { display: flex; align-items: center; gap: 0; font-size: 17px; letter-spacing: -.6px; text-decoration: none; color: var(--ink); font-weight: 700; }
-/* Learn: Style .brand > span:last-child. A class selector starts with ., > means direct child, and :
-selects a state/pseudo-class. font-weight=400 sets text weight. */
+/* Style .brand > span:last-child. font-weight=400 sets text weight. */
 .brand > span:last-child { font-weight: 400; }
-/* Learn: Style .brandmark. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. color=var(--green) sets foreground/text color. font-size=35px sets text size.
-margin-right=8px sets outside spacing to the right. line-height=1 sets line spacing. */
+/* Style .brandmark. color=var(--green) sets foreground/text color. font-size=35px sets text size.
+   margin-right=8px sets outside spacing to the right. line-height=1 sets line spacing. */
 .brandmark { color: var(--green); font-size: 35px; margin-right: 8px; line-height: 1; }
-/* Learn: Style .sidebar-label. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. font-size=10px sets text size. letter-spacing=1.8px sets spacing between characters.
-color=var(--muted) sets foreground/text color. margin=55px 12px 14px sets outside spacing
-(top/right/bottom/left order). */
+/* Style .sidebar-label. font-size=10px sets text size. letter-spacing=1.8px sets spacing between
+   characters. color=var(--muted) sets foreground/text color. margin=55px 12px 14px sets outside
+   spacing (top/right/bottom/left order). */
 .sidebar-label { font-size: 10px; letter-spacing: 1.8px; color: var(--muted); margin: 55px 12px 14px; }
-/* Learn: Style .nav-active. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. background=#e0e9dd sets element background. padding=13px 15px sets inside spacing
-(top/right/bottom/left order). border-radius=7px sets corner rounding. color=#284f3c sets
-foreground/text color. font-weight=600 sets text weight. */
+/* Style .nav-active. background=#e0e9dd sets element background. padding=13px 15px sets inside
+   spacing (top/right/bottom/left order). border-radius=7px sets corner rounding. color=#284f3c
+   sets foreground/text color. font-weight=600 sets text weight. */
 .nav-active { background: #e0e9dd; padding: 13px 15px; border-radius: 7px; color: #284f3c; font-weight: 600; }
-/* Learn: Style .nav-active span. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. margin-right=10px sets outside spacing to the right. */
+/* Style .nav-active span. margin-right=10px sets outside spacing to the right. */
 .nav-active span { margin-right: 10px; }
-/* Learn: Style .sidebar-note. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. margin-top=auto sets outside spacing above. padding=40px 8px 0 sets inside spacing
-(top/right/bottom/left order). font-size=12px sets text size. color=#526255 sets foreground/text color.
-line-height=1.9 sets line spacing. */
+/* Style .sidebar-note. margin-top=auto sets outside spacing above. padding=40px 8px 0 sets inside
+   spacing (top/right/bottom/left order). font-size=12px sets text size. color=#526255 sets
+   foreground/text color. line-height=1.9 sets line spacing. */
 .sidebar-note { margin-top: auto; padding: 40px 8px 0; font-size: 12px; color: #526255; line-height: 1.9; }
-/* Learn: Style .sidebar-note small. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. color=#778278 sets foreground/text color. margin-left=14px sets outside spacing to
-the left. */
+/* Style .sidebar-note small. color=#778278 sets foreground/text color. margin-left=14px sets
+   outside spacing to the left. */
 .sidebar-note small { color: #778278; margin-left: 14px; }
-/* Learn: Style .dot. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. display=inline-block sets layout mode. width=6px sets element width. height=6px sets
-element height. border-radius=50% sets corner rounding. background=#64886c sets element background.
-margin-right=8px sets outside spacing to the right. */
+/* Style .dot. display=inline-block sets layout mode. width=6px sets element width. height=6px sets
+   element height. border-radius=50% sets corner rounding. background=#64886c sets element
+   background. margin-right=8px sets outside spacing to the right. */
 .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #64886c; margin-right: 8px; }
-/* Learn: Style main. flex=1 sets how this item grows/shrinks and its initial basis. min-width=0 sets
-minimum element width. */
+/* Style main. flex=1 sets how this item grows/shrinks and its initial basis. min-width=0 sets
+   minimum element width. */
 main { flex: 1; min-width: 0; }
-/* Learn: Style .topbar. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. min-height=80px sets minimum element height. border-bottom=1px solid var(--line)
-sets bottom divider. display=flex sets layout mode. justify-content=space-between sets main-axis
-distribution in flex layout. align-items=center sets cross-axis alignment in flex layout. padding=0 40px
-sets inside spacing (top/right/bottom/left order). color=var(--muted) sets foreground/text color.
-font-size=12px sets text size. */
+/* Style .topbar. min-height=80px sets minimum element height. border-bottom=1px solid var(--line)
+   sets bottom divider. display=flex sets layout mode. justify-content=space-between sets main-axis
+   distribution in flex layout. align-items=center sets cross-axis alignment in flex layout.
+   padding=0 40px sets inside spacing (top/right/bottom/left order). color=var(--muted) sets
+   foreground/text color. font-size=12px sets text size. */
 .topbar { min-height: 80px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; padding: 0 40px; color: var(--muted); font-size: 12px; }
-/* Learn: Style .topbar strong. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. color=var(--ink) sets foreground/text color. font-weight=500 sets text weight.
-margin-left=6px sets outside spacing to the left. */
+/* Style .topbar strong. color=var(--ink) sets foreground/text color. font-weight=500 sets text
+   weight. margin-left=6px sets outside spacing to the left. */
 .topbar strong { color: var(--ink); font-weight: 500; margin-left: 6px; }
-/* Learn: Style .local-badge. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. border=1px solid #d4dcd0 sets all border edges. border-radius=4px sets corner
-rounding. padding=5px 8px sets inside spacing (top/right/bottom/left order). font-size=9px sets text
-size. letter-spacing=1.3px sets spacing between characters. */
+/* Style .local-badge. border=1px solid #d4dcd0 sets all border edges. border-radius=4px sets
+   corner rounding. padding=5px 8px sets inside spacing (top/right/bottom/left order).
+   font-size=9px sets text size. letter-spacing=1.3px sets spacing between characters. */
 .local-badge { border: 1px solid #d4dcd0; border-radius: 4px; padding: 5px 8px; font-size: 9px; letter-spacing: 1.3px; }
-/* Learn: Style .content. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. max-width=1080px sets maximum element width. padding=66px 48px 24px sets inside
-spacing (top/right/bottom/left order). margin=0 auto sets outside spacing (top/right/bottom/left order). */
+/* Style .content. max-width=1080px sets maximum element width. padding=66px 48px 24px sets inside
+   spacing (top/right/bottom/left order). margin=0 auto sets outside spacing (top/right/bottom/left
+   order). */
 .content { max-width: 1080px; padding: 66px 48px 24px; margin: 0 auto; }
-/* Learn: Style .eyebrow. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. color=var(--green) sets foreground/text color. font-size=10px sets text size.
-letter-spacing=2px sets spacing between characters. font-weight=700 sets text weight. */
+/* Style .eyebrow. color=var(--green) sets foreground/text color. font-size=10px sets text size.
+   letter-spacing=2px sets spacing between characters. font-weight=700 sets text weight. */
 .eyebrow { color: var(--green); font-size: 10px; letter-spacing: 2px; font-weight: 700; }
-/* Learn: Style h1. font-family=Georgia, 'Times New Roman', serif sets font fallback order.
-font-size=clamp(32px, 3.8vw, 47px) sets text size. line-height=1.2 sets line spacing. font-weight=400
-sets text weight. letter-spacing=-1.5px sets spacing between characters. margin=18px 0 13px sets outside
-spacing (top/right/bottom/left order). */
+/* Style h1. font-family=Georgia, 'Times New Roman', serif sets font fallback order.
+   font-size=clamp(32px, 3.8vw, 47px) sets text size. line-height=1.2 sets line spacing.
+   font-weight=400 sets text weight. letter-spacing=-1.5px sets spacing between characters.
+   margin=18px 0 13px sets outside spacing (top/right/bottom/left order). */
 h1 { font-family: Georgia, 'Times New Roman', serif; font-size: clamp(32px, 3.8vw, 47px); line-height: 1.2; font-weight: 400; letter-spacing: -1.5px; margin: 18px 0 13px; }
-/* Learn: Style .intro. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. color=var(--muted) sets foreground/text color. max-width=620px sets maximum element
-width. font-size=15px sets text size. line-height=1.7 sets line spacing. margin-bottom=30px sets outside
-spacing below. */
+/* Style .intro. color=var(--muted) sets foreground/text color. max-width=620px sets maximum
+   element width. font-size=15px sets text size. line-height=1.7 sets line spacing.
+   margin-bottom=30px sets outside spacing below. */
 .intro { color: var(--muted); max-width: 620px; font-size: 15px; line-height: 1.7; margin-bottom: 30px; }
-/* Learn: Style .composer. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. border=1px solid #ccd7c9 sets all border edges. background=#fff sets element
-background. border-radius=12px sets corner rounding. box-shadow=0 5px 22px #26382806 sets shadow around
-the element. overflow=hidden sets how content beyond the box is handled. */
+/* Style .composer. border=1px solid #ccd7c9 sets all border edges. background=#fff sets element
+   background. border-radius=12px sets corner rounding. box-shadow=0 5px 22px #26382806 sets shadow
+   around the element. overflow=hidden sets how content beyond the box is handled. */
 .composer { border: 1px solid #ccd7c9; background: #fff; border-radius: 12px; box-shadow: 0 5px 22px #26382806; overflow: hidden; }
-/* Learn: Style .composer form > label. A class selector starts with ., > means direct child, and : selects
-a state/pseudo-class. display=block sets layout mode. font-size=11px sets text size. color=var(--muted)
-sets foreground/text color. padding=21px 22px 0 sets inside spacing (top/right/bottom/left order). */
+/* Style .composer form > label. display=block sets layout mode. font-size=11px sets text size.
+   color=var(--muted) sets foreground/text color. padding=21px 22px 0 sets inside spacing
+   (top/right/bottom/left order). */
 .composer form > label { display: block; font-size: 11px; color: var(--muted); padding: 21px 22px 0; }
-/* Learn: Style textarea. border=0 sets all border edges. resize=vertical sets allowed user resizing
-directions. min-height=135px sets minimum element height. width=100% sets element width. padding=14px
-22px sets inside spacing (top/right/bottom/left order). color=var(--ink) sets foreground/text color.
-background=transparent sets element background. font-size=16px sets text size. line-height=1.7 sets line
-spacing. */
+/* Style textarea. border=0 sets all border edges. resize=vertical sets allowed user resizing
+   directions. min-height=135px sets minimum element height. width=100% sets element width.
+   padding=14px 22px sets inside spacing (top/right/bottom/left order). color=var(--ink) sets
+   foreground/text color. background=transparent sets element background. font-size=16px sets text
+   size. line-height=1.7 sets line spacing. */
 textarea { border: 0; resize: vertical; min-height: 135px; width: 100%; padding: 14px 22px; color: var(--ink); background: transparent; font-size: 16px; line-height: 1.7; }
-/* Learn: Style textarea::placeholder. A class selector starts with ., > means direct child, and : selects
-a state/pseudo-class. color=#939d93 sets foreground/text color. */
+/* Style textarea::placeholder. color=#939d93 sets foreground/text color. */
 textarea::placeholder { color: #939d93; }
-/* Learn: Style .composer-bottom. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. border-top=1px solid #edf0e9 sets top divider. padding=14px 18px sets inside spacing
-(top/right/bottom/left order). display=flex sets layout mode. align-items=center sets cross-axis
-alignment in flex layout. justify-content=space-between sets main-axis distribution in flex layout.
-gap=16px sets spacing between flex items. flex-wrap=wrap sets whether flex items may wrap. */
+/* Style .composer-bottom. border-top=1px solid #edf0e9 sets top divider. padding=14px 18px sets
+   inside spacing (top/right/bottom/left order). display=flex sets layout mode. align-items=center
+   sets cross-axis alignment in flex layout. justify-content=space-between sets main-axis
+   distribution in flex layout. gap=16px sets spacing between flex items. flex-wrap=wrap sets
+   whether flex items may wrap. */
 .composer-bottom { border-top: 1px solid #edf0e9; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-/* Learn: Style .controls. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. display=flex sets layout mode. align-items=center sets cross-axis alignment in flex
-layout. gap=15px sets spacing between flex items. flex-wrap=wrap sets whether flex items may wrap. */
+/* Style .controls. display=flex sets layout mode. align-items=center sets cross-axis alignment in
+   flex layout. gap=15px sets spacing between flex items. flex-wrap=wrap sets whether flex items
+   may wrap. */
 .controls { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
-/* Learn: Style .controls label. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. font-size=10px sets text size. color=var(--muted) sets foreground/text color.
-display=flex sets layout mode. flex-direction=column sets main axis of flex layout. gap=3px sets spacing
-between flex items. */
+/* Style .controls label. font-size=10px sets text size. color=var(--muted) sets foreground/text
+   color. display=flex sets layout mode. flex-direction=column sets main axis of flex layout.
+   gap=3px sets spacing between flex items. */
 .controls label { font-size: 10px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
-/* Learn: Style select. border=0 sets all border edges. background=#f1f4ef sets element background.
-border-radius=4px sets corner rounding. color=#354737 sets foreground/text color. padding=5px sets
-inside spacing (top/right/bottom/left order). font-size=12px sets text size. */
+/* Style select. border=0 sets all border edges. background=#f1f4ef sets element background.
+   border-radius=4px sets corner rounding. color=#354737 sets foreground/text color. padding=5px
+   sets inside spacing (top/right/bottom/left order). font-size=12px sets text size. */
 select { border: 0; background: #f1f4ef; border-radius: 4px; color: #354737; padding: 5px; font-size: 12px; }
-/* Learn: Style .time-limit. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. color=var(--muted) sets foreground/text color. font-size=11px sets text size. */
+/* Style .time-limit. color=var(--muted) sets foreground/text color. font-size=11px sets text size. */
 .time-limit { color: var(--muted); font-size: 11px; }
-/* Learn: Style .primary. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. border=0 sets all border edges. background=var(--green) sets element background.
-color=#fff sets foreground/text color. padding=12px 16px sets inside spacing (top/right/bottom/left
-order). border-radius=6px sets corner rounding. display=flex sets layout mode. gap=20px sets spacing
-between flex items. align-items=center sets cross-axis alignment in flex layout. font-size=12px sets
-text size. */
+/* Style .primary. border=0 sets all border edges. background=var(--green) sets element background.
+   color=#fff sets foreground/text color. padding=12px 16px sets inside spacing
+   (top/right/bottom/left order). border-radius=6px sets corner rounding. display=flex sets layout
+   mode. gap=20px sets spacing between flex items. align-items=center sets cross-axis alignment in
+   flex layout. font-size=12px sets text size. */
 .primary { border: 0; background: var(--green); color: #fff; padding: 12px 16px; border-radius: 6px; display: flex; gap: 20px; align-items: center; font-size: 12px; }
-/* Learn: Style .primary:hover:not(:disabled). A class selector starts with ., > means direct child, and :
-selects a state/pseudo-class. background=#194832 sets element background. */
+/* Style .primary:hover:not(:disabled). background=#194832 sets element background. */
 .primary:hover:not(:disabled) { background: #194832; }
-/* Learn: Style .examples. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. display=flex sets layout mode. flex-wrap=wrap sets whether flex items may wrap.
-gap=8px sets spacing between flex items. align-items=center sets cross-axis alignment in flex layout.
-margin=17px 0 27px sets outside spacing (top/right/bottom/left order). */
+/* Style .examples. display=flex sets layout mode. flex-wrap=wrap sets whether flex items may wrap.
+   gap=8px sets spacing between flex items. align-items=center sets cross-axis alignment in flex
+   layout. margin=17px 0 27px sets outside spacing (top/right/bottom/left order). */
 .examples { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 17px 0 27px; }
-/* Learn: Style .examples > span. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. color=var(--muted) sets foreground/text color. font-size=11px sets text size.
-margin-right=4px sets outside spacing to the right. */
+/* Style .examples > span. color=var(--muted) sets foreground/text color. font-size=11px sets text
+   size. margin-right=4px sets outside spacing to the right. */
 .examples > span { color: var(--muted); font-size: 11px; margin-right: 4px; }
-/* Learn: Style .examples button. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. border=1px solid var(--line) sets all border edges. background=transparent sets
-element background. padding=7px 10px sets inside spacing (top/right/bottom/left order).
-border-radius=5px sets corner rounding. font-size=11px sets text size. color=#526255 sets
-foreground/text color. */
+/* Style .examples button. border=1px solid var(--line) sets all border edges.
+   background=transparent sets element background. padding=7px 10px sets inside spacing
+   (top/right/bottom/left order). border-radius=5px sets corner rounding. font-size=11px sets text
+   size. color=#526255 sets foreground/text color. */
 .examples button { border: 1px solid var(--line); background: transparent; padding: 7px 10px; border-radius: 5px; font-size: 11px; color: #526255; }
-/* Learn: Style .examples button:hover. A class selector starts with ., > means direct child, and : selects
-a state/pseudo-class. background=#eaf0e5 sets element background. */
+/* Style .examples button:hover. background=#eaf0e5 sets element background. */
 .examples button:hover { background: #eaf0e5; }
-/* Learn: Style .examples button span. A class selector starts with ., > means direct child, and : selects
-a state/pseudo-class. margin-left=10px sets outside spacing to the left. */
+/* Style .examples button span. margin-left=10px sets outside spacing to the left. */
 .examples button span { margin-left: 10px; }
-/* Learn: Style .development-note. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. display=flex sets layout mode. gap=12px sets spacing between flex items.
-align-items=flex-start sets cross-axis alignment in flex layout. font-size=12px sets text size.
-line-height=1.7 sets line spacing. color=var(--muted) sets foreground/text color. */
+/* Style .development-note. display=flex sets layout mode. gap=12px sets spacing between flex
+   items. align-items=flex-start sets cross-axis alignment in flex layout. font-size=12px sets text
+   size. line-height=1.7 sets line spacing. color=var(--muted) sets foreground/text color. */
 .development-note { display: flex; gap: 12px; align-items: flex-start; font-size: 12px; line-height: 1.7; color: var(--muted); }
-/* Learn: Style .development-note p. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. margin=0 sets outside spacing (top/right/bottom/left order). */
+/* Style .development-note p. margin=0 sets outside spacing (top/right/bottom/left order). */
 .development-note p { margin: 0; }
-/* Learn: Style .development-note strong. A class selector starts with ., > means direct child, and :
-selects a state/pseudo-class. color=#4d5f4f sets foreground/text color. margin-right=6px sets outside
-spacing to the right. */
+/* Style .development-note strong. color=#4d5f4f sets foreground/text color. margin-right=6px sets
+   outside spacing to the right. */
 .development-note strong { color: #4d5f4f; margin-right: 6px; }
-/* Learn: Style .note-icon. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. border=1px solid #a9b5a4 sets all border edges. border-radius=50% sets corner
-rounding. min-width=15px sets minimum element width. height=15px sets element height. text-align=center
-sets horizontal text alignment. font-size=10px sets text size. line-height=14px sets line spacing.
-margin-top=2px sets outside spacing above. */
+/* Style .note-icon. border=1px solid #a9b5a4 sets all border edges. border-radius=50% sets corner
+   rounding. min-width=15px sets minimum element width. height=15px sets element height.
+   text-align=center sets horizontal text alignment. font-size=10px sets text size.
+   line-height=14px sets line spacing. margin-top=2px sets outside spacing above. */
 .note-icon { border: 1px solid #a9b5a4; border-radius: 50%; min-width: 15px; height: 15px; text-align: center; font-size: 10px; line-height: 14px; margin-top: 2px; }
-/* Learn: Style .error. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. border=1px solid #d6bcb1 sets all border edges. background=#fbf0ea sets element
-background. color=#7d372a sets foreground/text color. padding=12px 15px sets inside spacing
-(top/right/bottom/left order). margin-top=22px sets outside spacing above. border-radius=5px sets corner
-rounding. font-size=12px sets text size. line-height=1.6 sets line spacing. */
+/* Style .error. border=1px solid #d6bcb1 sets all border edges. background=#fbf0ea sets element
+   background. color=#7d372a sets foreground/text color. padding=12px 15px sets inside spacing
+   (top/right/bottom/left order). margin-top=22px sets outside spacing above. border-radius=5px
+   sets corner rounding. font-size=12px sets text size. line-height=1.6 sets line spacing. */
 .error { border: 1px solid #d6bcb1; background: #fbf0ea; color: #7d372a; padding: 12px 15px; margin-top: 22px; border-radius: 5px; font-size: 12px; line-height: 1.6; }
-/* Learn: Style .error button. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. background=transparent sets element background. border=0 sets all border edges.
-text-decoration=underline sets link/text decoration. color=inherit sets foreground/text color.
-margin-left=8px sets outside spacing to the left. */
+/* Style .error button. background=transparent sets element background. border=0 sets all border
+   edges. text-decoration=underline sets link/text decoration. color=inherit sets foreground/text
+   color. margin-left=8px sets outside spacing to the left. */
 .error button { background: transparent; border: 0; text-decoration: underline; color: inherit; margin-left: 8px; }
-/* Learn: Style .success. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. color=var(--green) sets foreground/text color. font-size=12px sets text size.
-padding=12px sets inside spacing (top/right/bottom/left order). background=#eaf0e5 sets element
-background. border-radius=5px sets corner rounding. */
+/* Style .success. color=var(--green) sets foreground/text color. font-size=12px sets text size.
+   padding=12px sets inside spacing (top/right/bottom/left order). background=#eaf0e5 sets element
+   background. border-radius=5px sets corner rounding. */
 .success { color: var(--green); font-size: 12px; padding: 12px; background: #eaf0e5; border-radius: 5px; }
-/* Learn: Style .drafts. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. margin-top=45px sets outside spacing above. */
+/* Style .drafts. margin-top=45px sets outside spacing above. */
 .drafts { margin-top: 45px; }
-/* Learn: Style .section-heading. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. display=flex sets layout mode. justify-content=space-between sets main-axis
-distribution in flex layout. align-items=center sets cross-axis alignment in flex layout.
-margin-bottom=18px sets outside spacing below. */
+/* Style .section-heading. display=flex sets layout mode. justify-content=space-between sets
+   main-axis distribution in flex layout. align-items=center sets cross-axis alignment in flex
+   layout. margin-bottom=18px sets outside spacing below. */
 .section-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
-/* Learn: Style h2. font-weight=500 sets text weight. font-size=15px sets text size. margin=0 sets outside
-spacing (top/right/bottom/left order). */
+/* Style h2. font-weight=500 sets text weight. font-size=15px sets text size. margin=0 sets outside
+   spacing (top/right/bottom/left order). */
 h2 { font-weight: 500; font-size: 15px; margin: 0; }
-/* Learn: Style h2 span. color=var(--muted) sets foreground/text color. background=#e9ede5 sets element
-background. font-size=10px sets text size. padding=3px 7px sets inside spacing (top/right/bottom/left
-order). border-radius=4px sets corner rounding. margin-left=8px sets outside spacing to the left. */
+/* Style h2 span. color=var(--muted) sets foreground/text color. background=#e9ede5 sets element
+   background. font-size=10px sets text size. padding=3px 7px sets inside spacing
+   (top/right/bottom/left order). border-radius=4px sets corner rounding. margin-left=8px sets
+   outside spacing to the left. */
 h2 span { color: var(--muted); background: #e9ede5; font-size: 10px; padding: 3px 7px; border-radius: 4px; margin-left: 8px; }
-/* Learn: Style .refresh. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. border=0 sets all border edges. background=transparent sets element background.
-color=var(--muted) sets foreground/text color. font-size=11px sets text size. */
+/* Style .refresh. border=0 sets all border edges. background=transparent sets element background.
+   color=var(--muted) sets foreground/text color. font-size=11px sets text size. */
 .refresh { border: 0; background: transparent; color: var(--muted); font-size: 11px; }
-/* Learn: Style .empty. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. text-align=center sets horizontal text alignment. padding=33px 15px sets inside
-spacing (top/right/bottom/left order). border=1px dashed #d7dfd2 sets all border edges.
-border-radius=8px sets corner rounding. color=var(--muted) sets foreground/text color. font-size=12px
-sets text size. */
+/* Style .empty. text-align=center sets horizontal text alignment. padding=33px 15px sets inside
+   spacing (top/right/bottom/left order). border=1px dashed #d7dfd2 sets all border edges.
+   border-radius=8px sets corner rounding. color=var(--muted) sets foreground/text color.
+   font-size=12px sets text size. */
 .empty { text-align: center; padding: 33px 15px; border: 1px dashed #d7dfd2; border-radius: 8px; color: var(--muted); font-size: 12px; }
-/* Learn: Style .empty-symbol. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. font-size=30px sets text size. color=#839b7d sets foreground/text color. */
+/* Style .empty-symbol. font-size=30px sets text size. color=#839b7d sets foreground/text color. */
 .empty-symbol { font-size: 30px; color: #839b7d; }
-/* Learn: Style .empty h3. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. font-size=14px sets text size. font-weight=500 sets text weight. color=#4a5c4b sets
-foreground/text color. margin=7px 0 sets outside spacing (top/right/bottom/left order). */
+/* Style .empty h3. font-size=14px sets text size. font-weight=500 sets text weight. color=#4a5c4b
+   sets foreground/text color. margin=7px 0 sets outside spacing (top/right/bottom/left order). */
 .empty h3 { font-size: 14px; font-weight: 500; color: #4a5c4b; margin: 7px 0; }
-/* Learn: Style .empty p. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. margin=7px 0 sets outside spacing (top/right/bottom/left order). */
+/* Style .empty p. margin=7px 0 sets outside spacing (top/right/bottom/left order). */
 .empty p { margin: 7px 0; }
-/* Learn: Style .run-list. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. border-top=1px solid var(--line) sets top divider. */
+/* Style .run-list. border-top=1px solid var(--line) sets top divider. */
 .run-list { border-top: 1px solid var(--line); }
-/* Learn: Style .run. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. display=flex sets layout mode. align-items=center sets cross-axis alignment in flex
-layout. gap=15px sets spacing between flex items. padding=19px 0 sets inside spacing
-(top/right/bottom/left order). border-bottom=1px solid var(--line) sets bottom divider. */
+/* Style .run. display=flex sets layout mode. align-items=center sets cross-axis alignment in flex
+   layout. gap=15px sets spacing between flex items. padding=19px 0 sets inside spacing
+   (top/right/bottom/left order). border-bottom=1px solid var(--line) sets bottom divider. */
 .run { display: flex; align-items: center; gap: 15px; padding: 19px 0; border-bottom: 1px solid var(--line); }
-/* Learn: Style .run-symbol. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. padding=10px 13px sets inside spacing (top/right/bottom/left order).
-background=#e9eee4 sets element background. border-radius=6px sets corner rounding. color=var(--green)
-sets foreground/text color. */
+/* Style .run-symbol. padding=10px 13px sets inside spacing (top/right/bottom/left order).
+   background=#e9eee4 sets element background. border-radius=6px sets corner rounding.
+   color=var(--green) sets foreground/text color. */
 .run-symbol { padding: 10px 13px; background: #e9eee4; border-radius: 6px; color: var(--green); }
-/* Learn: Style .run-main. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. flex=1 sets how this item grows/shrinks and its initial basis. min-width=0 sets
-minimum element width. */
+/* Style .run-main. flex=1 sets how this item grows/shrinks and its initial basis. min-width=0 sets
+   minimum element width. */
 .run-main { flex: 1; min-width: 0; }
-/* Learn: Style .run h3. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. font-size=14px sets text size. line-height=1.6 sets line spacing. font-weight=500
-sets text weight. overflow-wrap=anywhere sets whether long words/URLs may wrap. margin=0 sets outside
-spacing (top/right/bottom/left order). */
+/* Style .run h3. font-size=14px sets text size. line-height=1.6 sets line spacing. font-weight=500
+   sets text weight. overflow-wrap=anywhere sets whether long words/URLs may wrap. margin=0 sets
+   outside spacing (top/right/bottom/left order). */
 .run h3 { font-size: 14px; line-height: 1.6; font-weight: 500; overflow-wrap: anywhere; margin: 0; }
-/* Learn: Style .run p. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. color=var(--muted) sets foreground/text color. font-size=11px sets text size.
-margin=5px 0 0 sets outside spacing (top/right/bottom/left order). */
+/* Style .run p. color=var(--muted) sets foreground/text color. font-size=11px sets text size.
+   margin=5px 0 0 sets outside spacing (top/right/bottom/left order). */
 .run p { color: var(--muted); font-size: 11px; margin: 5px 0 0; }
-/* Learn: Style .run p span. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. margin=0 7px sets outside spacing (top/right/bottom/left order). */
+/* Style .run p span. margin=0 7px sets outside spacing (top/right/bottom/left order). */
 .run p span { margin: 0 7px; }
-/* Learn: Style .draft-badge. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. color=#637354 sets foreground/text color. background=#edf0e5 sets element
-background. border-radius=4px sets corner rounding. padding=4px 8px sets inside spacing
-(top/right/bottom/left order). font-size=10px sets text size. */
+/* Style .draft-badge. color=#637354 sets foreground/text color. background=#edf0e5 sets element
+   background. border-radius=4px sets corner rounding. padding=4px 8px sets inside spacing
+   (top/right/bottom/left order). font-size=10px sets text size. */
 .draft-badge { color: #637354; background: #edf0e5; border-radius: 4px; padding: 4px 8px; font-size: 10px; }
-/* Learn: Style .delete-draft. A class selector starts with ., > means direct child, and : selects a
-state/pseudo-class. border=1px solid #d6bcb1 sets all border edges. border-radius=4px sets corner
-rounding. background=transparent sets element background. color=#7d372a sets foreground/text color.
-padding=5px 8px sets inside spacing (top/right/bottom/left order). font-size=11px sets text size. */
+/* Style .delete-draft. border=1px solid #d6bcb1 sets all border edges. border-radius=4px sets
+   corner rounding. background=transparent sets element background. color=#7d372a sets
+   foreground/text color. padding=5px 8px sets inside spacing (top/right/bottom/left order).
+   font-size=11px sets text size. */
 .delete-draft { border: 1px solid #d6bcb1; border-radius: 4px; background: transparent; color: #7d372a; padding: 5px 8px; font-size: 11px; }
-/* Learn: Style .delete-draft:hover:not(:disabled). A class selector starts with ., > means direct child,
-and : selects a state/pseudo-class. background=#fbf0ea sets element background. */
+/* Style .delete-draft:hover:not(:disabled). background=#fbf0ea sets element background. */
 .delete-draft:hover:not(:disabled) { background: #fbf0ea; }
-/* Learn: Style footer. margin-top=50px sets outside spacing above. border-top=1px solid var(--line) sets
-top divider. padding-top=17px sets inside spacing above. display=flex sets layout mode.
-justify-content=space-between sets main-axis distribution in flex layout. flex-wrap=wrap sets whether
-flex items may wrap. gap=10px sets spacing between flex items. color=#7f897d sets foreground/text color.
-font-size=10px sets text size. */
+/* Style footer. margin-top=50px sets outside spacing above. border-top=1px solid var(--line) sets
+   top divider. padding-top=17px sets inside spacing above. display=flex sets layout mode.
+   justify-content=space-between sets main-axis distribution in flex layout. flex-wrap=wrap sets
+   whether flex items may wrap. gap=10px sets spacing between flex items. color=#7f897d sets
+   foreground/text color. font-size=10px sets text size. */
 footer { margin-top: 50px; border-top: 1px solid var(--line); padding-top: 17px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; color: #7f897d; font-size: 10px; }
-/* Learn: Apply these nested layout overrides only at the specified maximum viewport width; the narrower
-rule adapts the dashboard to phones.width=215px sets element width. padding=30px 15px sets inside
-spacing (top/right/bottom/left order). font-size=15px sets text size. padding=45px 28px 24px sets inside
-spacing (top/right/bottom/left order). */
+/* Apply these nested layout overrides only at the specified maximum viewport width; the narrower
+   rule adapts the dashboard to phones.width=215px sets element width. padding=30px 15px sets
+   inside spacing (top/right/bottom/left order). font-size=15px sets text size. padding=45px 28px
+   24px sets inside spacing (top/right/bottom/left order). */
 @media (max-width: 1000px) { .sidebar { width: 215px; padding: 30px 15px; } .brand { font-size: 15px; } .content { padding: 45px 28px 24px; } }
-/* Learn: Apply these nested layout overrides only at the specified maximum viewport width; the narrower
-rule adapts the dashboard to phones.display=block sets layout mode. width=auto sets element width.
-padding=16px 20px sets inside spacing (top/right/bottom/left order). border-right=0 sets right divider.
-border-bottom=1px solid var(--line) sets bottom divider. display=none sets layout mode. min-height=55px
-sets minimum element height. padding=0 20px sets inside spacing (top/right/bottom/left order).
-padding=36px 20px 24px sets inside spacing (top/right/bottom/left order). align-items=stretch sets
-cross-axis alignment in flex layout. justify-content=space-between sets main-axis distribution in flex
-layout. gap=10px sets spacing between flex items. display=none sets layout mode. */
+/* Apply these nested layout overrides only at the specified maximum viewport width; the narrower
+   rule adapts the dashboard to phones.display=block sets layout mode. width=auto sets element
+   width. padding=16px 20px sets inside spacing (top/right/bottom/left order). border-right=0 sets
+   right divider. border-bottom=1px solid var(--line) sets bottom divider. display=none sets layout
+   mode. min-height=55px sets minimum element height. padding=0 20px sets inside spacing
+   (top/right/bottom/left order). padding=36px 20px 24px sets inside spacing (top/right/bottom/left
+   order). align-items=stretch sets cross-axis alignment in flex layout.
+   justify-content=space-between sets main-axis distribution in flex layout. gap=10px sets spacing
+   between flex items. display=none sets layout mode. */
 @media (max-width: 720px) { .workspace { display: block; } .sidebar { width: auto; padding: 16px 20px; border-right: 0; border-bottom: 1px solid var(--line); } .sidebar-label, .nav-active, .sidebar-note { display: none; } .topbar { min-height: 55px; padding: 0 20px; } .content { padding: 36px 20px 24px; } .composer-bottom { align-items: stretch; } .primary { justify-content: space-between; } .run { gap: 10px; } .run-symbol { display: none; } }
