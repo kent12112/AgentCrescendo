@@ -31,6 +31,8 @@ dependencies = [
   "psycopg[binary]>=3.2,<4",
   # Alembic applies explicit versioned database migrations.
   "alembic>=1.14,<2",
+  # Temporal Python SDK: the API starts run workflows and the worker executes them.
+  "temporalio>=1.36,<2",
 ]
 
 # Define opt-in dependency groups (extras), keeping paid-provider integrations optional.
@@ -40,18 +42,20 @@ dependencies = [
 e2b = ["e2b-desktop>=2,<3", "playwright>=1.49,<2", "httpx>=0.28,<1", "websockets>=15,<17", "pillow>=10,<14"]
 # The model-provider extra installs the Groq SDK.
 groq = ["groq>=0.31,<1"]
+# The job-search extra reads resume PDFs locally and fetches ATS job-board APIs (JOB-F02).
+jobs = ["pypdf>=5,<7", "httpx>=0.28,<1"]
 # The development extra supplies pytest and the HTTP client used by local API tests.
 dev = ["pytest>=8,<10", "httpx>=0.28,<1"]
 
 # Configure discovery of the three importable Python packages in this repository.
 [tool.setuptools.packages.find]
 # Search these source roots; tests and scripts are not additional installed packages.
-where = ["services/api", "packages/agent_runtime", "packages/security"]
+where = ["services/api", "services/workers", "packages/agent_runtime", "packages/security"]
 # Include package names matching these prefixes, including the newly split route modules.
-include = ["crescendo_api*", "crescendo_agent*", "crescendo_security*"]
+include = ["crescendo_api*", "crescendo_workers*", "crescendo_agent*", "crescendo_security*"]
 
 # Configure pytest when invoked from the repository root.
 [tool.pytest.ini_options]
 # Discover the API, security, and runtime tests; smoke scripts run only when explicitly requested.
-testpaths = ["services/api/tests", "packages/security/tests", "packages/agent_runtime/tests"]
+testpaths = ["services/api/tests", "services/workers/tests", "packages/security/tests", "packages/agent_runtime/tests"]
 

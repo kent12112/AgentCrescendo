@@ -1,6 +1,8 @@
 """Policy-filtered Chrome, text observations, and desktop actions in E2B."""
 # Import from contextlib: contextmanager (turns a generator into a with-block resource lifetime).
 from contextlib import contextmanager
+# Import re: pulls Chrome's net::ERR code out of a navigation error.
+import re
 # Import shlex: quotes fixed remote Python source safely for a shell command.
 import shlex
 # Import from typing: Any (marks a deliberately unconstrained type, often at an SDK boundary).
@@ -13,7 +15,9 @@ from urllib.parse import urldefrag, urljoin, urlsplit
 # Import from crescendo_security.policy: TaskGrant (holds the task identity and immutable tool/host
 # allowlists); ToolCall (holds an untrusted proposed tool name and argument mapping); authorize
 # (checks task grants and argument bounds before a proposed tool can execute).
-from crescendo_security.policy import ScreenArea, TaskGrant, ToolCall, authorize
+from crescendo_security.policy import (
+    PRIVATE_NETWORKS, ScreenArea, TaskGrant, ToolCall, authorize, authorize_destination,
+)
 
 # Import from .browser_bootstrap: RELAY (the fixed remote CDP TCP relay program); START_BROWSER (the
 # fixed remote Chrome launch/readiness program); WAIT_READY (the fixed remote relay-readiness
@@ -160,6 +164,41 @@ CLICK_TARGET = """([x, y]) => {
 SAME_TAB_TARGETS = frozenset({"", "_self", "_top", "_parent"})
 
 
+def _field_script(body: str) -> str:
+    from .link_grounding import TEXT_FIELD
+    return "([x, y]) => {\n" + TEXT_FIELD + "\n" + body + "\n}"
+
+
+# What type_text would type into at a viewport point (W1X-F03). Only reads the page.
+FIELD_TARGET = _field_script("""
+    const hit = document.elementFromPoint(x, y);
+    if (!hit) return {kind: "none"};
+    if (hit.closest("iframe, frame, embed, object")) return {kind: "frame"};
+    if (!isTextField(hit)) return {kind: "other"};
+    const base = document.querySelector("base[target]");
+    const baseTarget = base ? base.getAttribute("target") : "";
+    return {kind: "field", target: hit.form ? (hit.form.getAttribute("target") ?? baseTarget) : ""};""")
+# True only if this tab's document has real keyboard focus and the focused element is
+# the text field at the point. Keys are never sent otherwise: they could reach the
+# address bar or another window instead of the page.
+FOCUSED_FIELD = _field_script("""
+    const hit = document.elementFromPoint(x, y);
+    return document.hasFocus() && isTextField(hit) && document.activeElement === hit;""")
+
+
+def field_target_problem(target) -> str | None:
+    """Why type_text may not type into this target, or None if it may proceed."""
+    kind = target.get("kind") if isinstance(target, dict) else None
+    if kind == "frame":
+        return "Typing inside embedded frames is not permitted."
+    if kind != "field":
+        return "There is no permitted text field at that point."
+    where = target.get("target")
+    if not isinstance(where, str) or where.strip().lower() not in SAME_TAB_TARGETS:
+        return "That field's form would open a new tab or window, which is not permitted."
+    return None
+
+
 def click_target_problem(target) -> str | None:
     """Why a click on this target is refused, or None if it may proceed."""
     kind = target.get("kind") if isinstance(target, dict) else None
@@ -188,7 +227,7 @@ ALLOWED_RESOURCE_TYPES = frozenset({"Document", "Stylesheet"})
 class E2BDesktop:
     # Define __init__ with parameters self, page, session, grant, max_chars, screenshot_provider,
     # scroll_provider, pointer_provider, viewer_provider.
-    def __init__(self, page: Any, session: Any, grant: TaskGrant, *, max_chars=4000, screenshot_provider=None, scroll_provider=None, pointer_provider=None, viewer_provider=None, click_provider=None):
+    def __init__(self, page: Any, session: Any, grant: TaskGrant, *, max_chars=4000, screenshot_provider=None, scroll_provider=None, pointer_provider=None, viewer_provider=None, click_provider=None, write_provider=None, key_provider=None):
         # Set self.page to page.
         self.page = page
         # Set self.session to session.
@@ -207,6 +246,11 @@ class E2BDesktop:
         self._viewer_provider = viewer_provider
         # The real desktop's left-click (E2B left_click), used only after all click checks.
         self._click_provider = click_provider
+        # The real desktop keyboard (E2B write / press), used only after type_text's checks.
+        self._write_provider = write_provider
+        self._key_provider = key_provider
+        self._focus_emulation_off = False
+        self._visible_field_ids = set()
         self._link_snapshot = None
         self._visible_link_ids = set()
         self._next_link_id = 1
@@ -324,16 +368,19 @@ class E2BDesktop:
         The resolved click passes the normal gateway and adapter.
         IDs are never reused within this desktop, so old observations fail closed.
         """
-        from .link_grounding import LINK_LABELS, MAX_VISIBLE_LINKS, READ_LINK_TARGETS
+        from .link_grounding import (LINK_LABELS, MAX_VISIBLE_FIELDS, MAX_VISIBLE_LINKS,
+                                     READ_LINK_TARGETS)
 
         previous, self._link_snapshot = self._link_snapshot, None
         self._visible_link_ids.clear()
+        self._visible_field_ids.clear()
         if previous is not None:
             try:
                 previous.dispose()
             except Exception:
                 pass  # A navigation may already have destroyed the old context.
-        if "click" not in self.grant.allowed_tools:
+        typing = "type_text" in self.grant.allowed_tools
+        if "click" not in self.grant.allowed_tools and not typing:
             raise ActionDenied("Click is not permitted for this task.")
         decision = authorize(self.grant, ToolCall("read_visible_links"))
         if not decision.allowed:
@@ -345,11 +392,13 @@ class E2BDesktop:
             self._link_snapshot = self.page.evaluate_handle(READ_LINK_TARGETS, {
                 "page": {"left": area.left, "top": area.top,
                          "right": area.right, "bottom": area.bottom},
-                "firstId": self._next_link_id, "limit": MAX_VISIBLE_LINKS})
+                "firstId": self._next_link_id, "limit": MAX_VISIBLE_LINKS,
+                "fieldLimit": MAX_VISIBLE_FIELDS if typing else 0})
             labels = self._link_snapshot.evaluate(LINK_LABELS)
         except Exception:
             return []  # No selectable IDs when the live page cannot be inspected.
-        self._visible_link_ids = {target["id"] for target in labels}
+        self._visible_link_ids = {target["id"] for target in labels if target.get("kind") != "field"}
+        self._visible_field_ids = {target["id"] for target in labels if target.get("kind") == "field"}
         self._next_link_id += len(labels)
         return labels
 
@@ -367,6 +416,38 @@ class E2BDesktop:
             raise ActionDenied("The selected link changed. Inspect the next screenshot and choose again.")
         return point["x"], point["y"]
 
+    def link_records(self, target_ids) -> dict[int, dict]:
+        """Browser-recorded label, href, and desktop point for IDs in the current snapshot.
+
+        Host-only (JOB-F01): lets a host trust what a cited link ID points to without
+        asking the model for titles or URLs. IDs outside the current snapshot are omitted.
+        """
+        from .link_grounding import LINK_RECORDS
+
+        ids = sorted({i for i in target_ids if type(i) is int and i in self._visible_link_ids})
+        if not ids:
+            return {}
+        try:
+            records = self._link_snapshot.evaluate(LINK_RECORDS, ids)
+        except Exception:
+            return {}
+        return {record["id"]: {"label": record["label"], "href": record["href"],
+                               "x": record["x"], "y": record["y"]} for record in records or []}
+
+    def resolve_field(self, target_id: int) -> tuple[int, int]:
+        """Resolve a current field ID to a checked screen point, without typing anything."""
+        from .link_grounding import RESOLVE_FIELD_TARGET
+
+        if type(target_id) is not int or target_id not in self._visible_field_ids:
+            raise ActionDenied("Choose a field ID from the current visible_links observation.")
+        try:
+            point = self._link_snapshot.evaluate(RESOLVE_FIELD_TARGET, target_id)
+        except Exception:
+            point = None
+        if point is None:
+            raise ActionDenied("The selected field changed. Inspect the next screenshot and choose again.")
+        return point["x"], point["y"]
+
     def click(self, x: int, y: int) -> str:
         """Left-click once at real screen pixel (x, y) and report what happened.
 
@@ -374,8 +455,6 @@ class E2BDesktop:
         -> wait for any page load, while the request filter checks every request.
         Raises ActionDenied with a safe reason when a check refuses the click.
         """
-        from playwright.sync_api import TimeoutError as PlaywrightTimeout
-
         area = self.click_area()
         decision = authorize(self.grant, ToolCall("click", {"x": x, "y": y}), click_area=area)
         if not decision.allowed:
@@ -388,13 +467,23 @@ class E2BDesktop:
         problem = click_target_problem(target)
         if problem is not None:
             raise ActionDenied(problem)
-        main_frame = self.session.send("Page.getFrameTree")["frameTree"]["frame"]["id"]
-        navigations_before = self._main_navigations
-        seen_before = len(self._document_frames_seen)
-        self._blocked_document_frames.clear()
+        before = self._before_action()
         # Move the REAL pointer, then press the REAL left button (see SCROLL_POINTER).
         self._pointer_provider(x, y)
         self._click_provider()
+        return self._after_action(before, "click")
+
+    def _before_action(self):
+        """Record the tab's state just before a click or key press that may load a page."""
+        main_frame = self.session.send("Page.getFrameTree")["frameTree"]["frame"]["id"]
+        self._blocked_document_frames.clear()
+        return main_frame, self._main_navigations, len(self._document_frames_seen)
+
+    def _after_action(self, before, what: str) -> str:
+        """Wait for any page load the action started and describe it. `what` names the action."""
+        from playwright.sync_api import TimeoutError as PlaywrightTimeout
+
+        main_frame, navigations_before, seen_before = before
         # Playwright runs our request-filter callback only while it is inside one of its
         # own calls, so wait with page.wait_for_timeout, never time.sleep: a sleeping
         # process leaves the page's requests paused forever (live probe, Nov 16, 2026).
@@ -405,7 +494,7 @@ class E2BDesktop:
                 started = True
                 break
         if not started:
-            return "The click did not start a page load. Inspect the next screenshot for its effect."
+            return f"The {what} did not start a page load. Inspect the next screenshot for its effect."
         # Wait for the tab to switch to the new document (or Chrome's error page), then
         # for that document to load. A request blocked by our filter needs no wait.
         if main_frame not in self._blocked_document_frames:
@@ -414,21 +503,64 @@ class E2BDesktop:
                     break
                 self.page.wait_for_timeout(250)
             else:
-                return "The click started a page load that did not finish within 20 seconds."
+                return f"The {what} started a page load that did not finish within 20 seconds."
         try:
             self.page.wait_for_load_state("load", timeout=20000)
         except PlaywrightTimeout:
-            return "The click started a page load that did not finish within 20 seconds."
+            return f"The {what} started a page load that did not finish within 20 seconds."
         if main_frame in self._blocked_document_frames:
             self._navigation_failure = Observation(
                 None,
                 "Navigation blocked by browser policy. No page content was read. "
                 "Choose another permitted source or finish with available information.",
             )
-            return "The page this click requested was blocked by browser policy. No page content was read."
+            return f"The page this {what} requested was blocked by browser policy. No page content was read."
         self._navigation_failure = None
         self.visited.append(self.page.url)
-        return f"The click opened {self.page.url}."
+        return f"The {what} opened {self.page.url}."
+
+    def type_text(self, x: int, y: int, text: str, submit: bool) -> str:
+        """Type one line into the text field at real screen pixel (x, y); optionally press Enter.
+
+        Order: gateway (args, page area) -> a permitted text field under the point ->
+        real pointer click on it -> this tab really has keyboard focus on that field ->
+        select its old text, type, re-check focus -> Enter if submit, then wait as a
+        click does. Page scripts are disabled and the filter passes only GET, so typed
+        text leaves the browser only when a form is submitted, as a checked URL.
+        """
+        area = self.click_area()
+        decision = authorize(self.grant, ToolCall("type_text", {"x": x, "y": y, "text": text, "submit": submit}),
+                             click_area=area)
+        if not decision.allowed:
+            raise ActionDenied(decision.reason)
+        if (self._click_provider is None or self._pointer_provider is None
+                or self._write_provider is None or self._key_provider is None):
+            raise RuntimeError("Desktop click, pointer, and keyboard providers are not configured.")
+        self.page.bring_to_front()
+        point = [x - area.left, y - area.top]
+        problem = field_target_problem(self.page.evaluate(FIELD_TARGET, point))
+        if problem is not None:
+            raise ActionDenied(problem)
+        if not self._focus_emulation_off:
+            # Playwright makes every page report focus by default; turn that off so the
+            # focus check below sees whether this tab really has the keyboard.
+            self.session.send("Emulation.setFocusEmulationEnabled", {"enabled": False})
+            self._focus_emulation_off = True
+        self._pointer_provider(x, y)
+        self._click_provider()
+        self.page.wait_for_timeout(250)
+        if self.page.evaluate(FOCUSED_FIELD, point) is not True:
+            raise ActionDenied("The text field did not receive keyboard focus, so nothing was typed.")
+        # ctrl+a selects only the field's own text, because focus was just confirmed.
+        self._key_provider(["ctrl", "a"])
+        self._write_provider(text)
+        if not submit:
+            return "Typed into the field. Inspect the next screenshot for its effect."
+        if self.page.evaluate(FOCUSED_FIELD, point) is not True:
+            return "Typed into the field, but it lost focus, so Enter was not pressed."
+        before = self._before_action()
+        self._key_provider("enter")
+        return self._after_action(before, "submission")
 
     def _frame_navigated(self, frame) -> None:
         if frame == self.page.main_frame:
@@ -468,8 +600,9 @@ class E2BDesktop:
             self._document_frames_seen.append(event.get("frameId"))
         # Try the following operations; matching except clauses handle failures.
         try:
-            # Set allowed to authorize(self.grant, ToolCall('navigate', {'url': url})).allowed.
-            allowed = authorize(self.grant, ToolCall("navigate", {"url": url})).allowed
+            # Destination rules only: page requests are not model tool calls, so this must
+            # not depend on the navigate tool (refused to the model in public-web mode).
+            allowed = authorize_destination(self.grant, url).allowed
         # Handle ValueError; unmatched errors propagate.
         except ValueError:
             # Set allowed to False.
@@ -601,16 +734,50 @@ class E2BDesktop:
 
     # Define navigate with parameters self, url.
     def navigate(self, url: str) -> None:
-        # Import from playwright.sync_api: Error as PlaywrightError (the SDK browser exception used
-        # to distinguish policy navigation failures).
-        from playwright.sync_api import Error as PlaywrightError
-
+        """Model-proposed navigation: needs the navigate tool and a permitted destination."""
         # Set decision to authorize(self.grant, ToolCall('navigate', {'url': url})).
         decision = authorize(self.grant, ToolCall("navigate", {"url": url}))
         # Check whether not (decision.allowed).
         if not decision.allowed:
             # Raise ValueError(decision.reason) to stop the normal path.
             raise ValueError(decision.reason)
+        self._load(url)
+
+    def navigate_and_report(self, url: str) -> str:
+        """navigate() for the vision loop: a load failure becomes an outcome, not a crash.
+
+        A model-chosen URL can be mistyped, not exist, or hang behind the firewall.
+        Refusals still raise ValueError. Only Chrome's error code is reported.
+        """
+        from playwright.sync_api import Error as PlaywrightError
+
+        try:
+            self.navigate(url)
+        except PlaywrightError as error:
+            code = re.search(r"net::ERR_[A-Z_]+", str(error))
+            self._navigation_failure = Observation(None, "The page did not load. No page content was read.")
+            return f"The page did not load ({code.group(0) if code else 'timeout or browser error'})."
+        if self._navigation_failure is not None:
+            return "The page was blocked by browser policy. No page content was read."
+        return f"The tab now shows {self.page.url}."
+
+    def open_start_page(self, url: str) -> None:
+        """Host-chosen start page, opened before the model acts.
+
+        Checks the destination only, so a public-web task can start somewhere
+        without the model being given navigate.
+        """
+        decision = authorize_destination(self.grant, url)
+        if not decision.allowed:
+            raise ValueError(decision.reason)
+        self._load(url)
+
+    def _load(self, url: str) -> None:
+        """Load an already-authorized URL; every request it makes still passes the filter."""
+        # Import from playwright.sync_api: Error as PlaywrightError (the SDK browser exception used
+        # to distinguish policy navigation failures).
+        from playwright.sync_api import Error as PlaywrightError
+
         # Call self._blocked_document_frames.clear with no arguments.
         self._blocked_document_frames.clear()
         self.last_navigation_status = None
@@ -657,6 +824,28 @@ class E2BDesktop:
         self.visited.append(self.page.url)
 
 
+def public_network_config(extra_denied=()) -> dict:
+    """Public-web mode: no allowlist; private ranges denied by E2B's firewall.
+
+    Verified live November 16, 2026 with a denied public canary (see
+    docs/e2b-preflight.md): deny_out is enforced without allow_out.
+    """
+    return {"deny_out": [*PRIVATE_NETWORKS, *extra_denied], "allow_public_traffic": False}
+
+
+def network_config(grant: TaskGrant) -> dict:
+    """E2B network settings for this grant.
+
+    Allowlist mode: deny all IPv4, allow the grant's exact hosts by name.
+    Public-web mode: see public_network_config.
+    allow_public_traffic=False requires authentication for the desktop's own URLs.
+    """
+    if grant.public_web:
+        return public_network_config()
+    return {"deny_out": ["0.0.0.0/0"], "allow_out": sorted(grant.allowed_hosts),
+            "allow_public_traffic": False}
+
+
 # Wrap the generator as a context manager: yield enters the with-block and exit resumes cleanup.
 @contextmanager
 # Define open_e2b_desktop with parameters grant, sandbox_type, playwright_factory, lifetime_seconds.
@@ -689,19 +878,12 @@ def open_e2b_desktop(grant: TaskGrant, *, sandbox_type=None, playwright_factory=
         from playwright.sync_api import sync_playwright
         # Save the Playwright factory so it can be called below.
         playwright_factory = sync_playwright
-    # Set sandbox to sandbox_type.create(timeout=lifetime_seconds, network={'deny_out':
-    # ['0.0.0.0/0'], 'allow_out': sorted(grant.allowed_hosts), 'allow_public_traffic': False}).
-    sandbox = sandbox_type.create(timeout=lifetime_seconds, network={
-        # Configure the provider to deny outbound IPv4 traffic by default.
-        "deny_out": ["0.0.0.0/0"],
-        # List the task’s permitted hosts as outbound exceptions.
-        "allow_out": sorted(grant.allowed_hosts),
-        # Require authenticated access to the sandbox’s exposed ports.
-        "allow_public_traffic": False,
+    # Create the desktop with this grant's network settings (see network_config).
     # When the lifetime runs out, destroy the desktop rather than pause it. E2B's default
     # is currently "kill", but stating it means a provider default change cannot turn the
     # safety net into a paused desktop that keeps its disk and can be resumed.
-    }, lifecycle={"on_timeout": "kill"})
+    sandbox = sandbox_type.create(timeout=lifetime_seconds, network=network_config(grant),
+                                  lifecycle={"on_timeout": "kill"})
     # Try the following operations; matching except clauses handle failures. The finally block runs
     # on every exit.
     try:
@@ -763,6 +945,8 @@ def open_e2b_desktop(grant: TaskGrant, *, sandbox_type=None, playwright_factory=
                                      pointer_provider=sandbox.move_mouse,
                                      # Supply the sandbox's left-click method without calling it yet.
                                      click_provider=sandbox.left_click,
+                                     write_provider=sandbox.write,
+                                     key_provider=sandbox.press,
                                      # Supply a callback that opens a live viewer when called.
                                      viewer_provider=lambda: _open_live_view(sandbox))
                 # Give desktop to the caller and pause here until execution resumes.

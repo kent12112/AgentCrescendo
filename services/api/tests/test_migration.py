@@ -42,6 +42,26 @@ def test_initial_migration_can_upgrade_and_downgrade(tmp_path, monkeypatch):
         # Compare the migrated schema with ORM metadata to detect schema drift.
         # Call command.check with config.
         command.check(config)
+        # 0003: start-command columns exist and the status check is the new one.
+        columns = {column["name"] for column in inspect(engine).get_columns("runs")}
+        assert {"workflow_id", "start_requested_at"} <= columns
+        checks = {check["sqltext"] for check in inspect(engine).get_check_constraints("runs")}
+        assert "status IN ('draft', 'starting', 'started')" in checks
+        assert "status = 'draft'" not in checks
+        # 0004: job search tables exist; stepping back to 0003 removes only them.
+        job_tables = {"job_companies", "job_postings", "job_crawl_runs"}
+        assert job_tables <= set(inspect(engine).get_table_names())
+        assert {"ix_job_postings_company", "ix_job_postings_published_at"} <= {
+            index["name"] for index in inspect(engine).get_indexes("job_postings")}
+        command.downgrade(config, "0003")
+        assert not job_tables & set(inspect(engine).get_table_names())
+        assert "workflow_id" in {column["name"] for column in inspect(engine).get_columns("runs")}
+        # Step back to 0002: the old status check returns and the columns go.
+        command.downgrade(config, "0002")
+        checks = {check["sqltext"] for check in inspect(engine).get_check_constraints("runs")}
+        assert "status = 'draft'" in checks and len(checks) == 5
+        assert "workflow_id" not in {column["name"] for column in inspect(engine).get_columns("runs")}
+        command.upgrade(config, "head")
         # Exercise reversal only against this disposable test database.
         # Call command.downgrade with config, 'base'.
         command.downgrade(config, "base")

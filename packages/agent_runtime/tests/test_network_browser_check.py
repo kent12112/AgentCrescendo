@@ -141,3 +141,35 @@ def test_main_requires_key_before_any_cloud_call(monkeypatch):
     monkeypatch.setattr("crescendo_agent.local_env.load_local_env", lambda: None)
     with pytest.raises(SystemExit, match="E2B_API_KEY"):
         check.main()
+
+
+# Public-web mode ---------------------------------------------------------------
+
+def public_evidence():
+    states = {url: "loaded" for url in check.PUBLIC_MUST_LOAD}
+    states.update({url: ("blocked_by_filter" if layer == "filter" else "failed_elsewhere")
+                   for url, layer in check.PUBLIC_MUST_NOT_LOAD.items()})
+    return {"subresources": states, "network_errors": {}}
+
+
+def test_public_boundary_passes():
+    assert check.judge_public(public_evidence())[0]
+
+
+@pytest.mark.parametrize("url", list(check.PUBLIC_MUST_NOT_LOAD))
+def test_public_any_private_or_rebinding_load_fails(url):
+    evidence = public_evidence()
+    evidence["subresources"][url] = "loaded"
+    assert not check.judge_public(evidence)[0]
+
+
+def test_public_rebinding_name_is_not_expected_from_the_filter():
+    # The filter sees only a public-looking name, so the firewall's failure counts.
+    assert check.PUBLIC_MUST_NOT_LOAD["https://10.0.0.1.sslip.io/rebind.css"] == "any"
+
+
+@pytest.mark.parametrize("url", list(check.PUBLIC_MUST_LOAD))
+def test_public_sites_must_actually_load(url):
+    evidence = public_evidence()
+    evidence["subresources"][url] = "failed_elsewhere"
+    assert not check.judge_public(evidence)[0]

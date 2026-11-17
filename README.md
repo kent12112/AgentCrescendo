@@ -84,17 +84,18 @@ Run each from the repository root with `.venv/bin/python scripts/<name>`.
 |---|---|---|
 | `e2b_visual_research_demo.py --watch` | Finds a value in the Boston article from screenshots and scrolling, then answers. Graded on whether the value was on screen at finish. | E2B, Groq |
 | `e2b_click_demo.py --watch` | Clicks from the Boston article to Massachusetts using browser-measured link IDs. | E2B, Groq |
+| `e2b_public_browse_demo.py --watch` | Public-web mode: no host list and no URL typing; reaches boston.gov from Wikipedia by clicking a link. | E2B, Groq |
 | `e2b_vision_agent_demo.py --watch` | Model-selected scrolling on a controlled test page. | E2B, Groq |
 | `groq_e2b_demo.py --trace` | Text-only research loop: page text instead of screenshots. | E2B, Groq |
-| `e2b_preflight.py` | Network-layer checks: what the desktop can and cannot reach. | E2B |
-| `e2b_network_browser_check.py` | Browser checks: subrequests, redirects, and meta refresh are blocked. | E2B |
+| `e2b_preflight.py [--public]` | Network-layer checks: what the desktop can and cannot reach (allowlist or public-web mode). | E2B |
+| `e2b_network_browser_check.py [--public]` | Browser checks: subrequests, redirects, private and rebinding destinations blocked. | E2B |
 | `e2b_click_check.py` | Click safety checks with the real pointer; no model. | E2B |
 | `e2b_termination_check.py` | Confirms E2B really destroys desktops. | E2B |
 | `smoke_*.py` | Local browser checks with no E2B, model, or paid calls. | Microsoft Edge |
 
 `--watch` opens a private local viewer and waits for you before the agent starts. `--save-screenshots` (research and click demos) writes the model's input images and `result.json` under the ignored `.demo-artifacts/` folder.
 
-What the agent may do is fixed in code: an exact host allowlist, a short tool list with no code execution, and network limits enforced outside the model. Known limits are recorded in [network preflight](docs/e2b-preflight.md). Annotated runs, including failures, are in [Week 1 traces](docs/week1-traces.md).
+What the agent may do is fixed in code: an exact host allowlist, or public-web mode (any public site, private addresses denied, movement by clicking links only), a short tool list with no code execution, and network limits enforced outside the model. Known limits are recorded in [network preflight](docs/e2b-preflight.md). Annotated runs, including failures, are in [Week 1 traces](docs/week1-traces.md).
 
 ## Project map
 

@@ -444,3 +444,153 @@ def run_preflight(*, sandbox_type: Any = None) -> dict:
     finally:
         # Ask the provider to terminate sandbox.
         sandbox.kill()
+
+
+# ---------------------------------------------------------------------------
+# Public-web mode (W1X-F02): allow public destinations, deny private ranges.
+# ---------------------------------------------------------------------------
+
+# A public address that always answers, deliberately added to the deny list.
+# Private targets usually have no listener, so "no connection" there proves
+# nothing on its own; this canary proves the deny list is actually enforced.
+# Its twin is never denied and must answer.
+# A plain TCP connect is NOT proof here: E2B's proxy accepts every TCP connection
+# on port 443 itself and only then judges it (live, November 16, 2026: the denied
+# canary "connected" on TCP 443 but its TLS was cut). So the canary counts as
+# reachable only if Cloudflare itself answers: a verified TLS handshake for
+# one.one.one.one, or a reply to a DNS question over UDP.
+CANARY_DENIED = "1.1.1.1"
+CANARY_OPEN = "1.0.0.1"
+
+PUBLIC_PROBE = PROBE.split("\nfor name, url in")[0] + r'''
+
+def https_get(url):
+    """One GET without proxies; any HTTP answer, even an error status, is reachable."""
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        request = urllib.request.Request(url, headers={"User-Agent": "CrescendoNetworkPreflight/0.1"})
+        with opener.open(request, timeout=10) as response:
+            return {"reachable": True, "http_status": response.status}
+    except urllib.error.HTTPError as exc:
+        return {"reachable": True, "http_status": exc.code}
+    except (OSError, urllib.error.URLError) as exc:
+        reason = getattr(exc, "reason", exc)
+        return {"reachable": False,
+                "error": error_name(reason) if isinstance(reason, BaseException) else "URLError"}
+
+
+# Public sites: any of them, with no allowlist.
+for name, url in [("public_example", "https://example.com/"),
+                  ("public_wikipedia", "https://en.wikipedia.org/wiki/Boston"),
+                  ("public_boston_gov", "https://www.boston.gov/")]:
+    results[name] = https_get(url)
+
+def cloudflare_answers(ip):
+    """reachable=True only if the real Cloudflare server answered (TLS or DNS)."""
+    try:
+        with socket.create_connection((ip, 443), timeout=8) as raw:
+            with ssl.create_default_context().wrap_socket(raw, server_hostname="one.one.one.one"):
+                tls = "verified"
+    except OSError as exc:
+        tls = error_name(exc)
+    dns = dns_udp(ip)
+    return {"reachable": tls == "verified" or dns["reachable"], "tls": tls,
+            "dns": "answered" if dns["reachable"] else dns.get("error", "no_match")}
+
+
+# Positive control: same provider, one address denied and one not.
+results["canary_denied"] = cloudflare_answers("''' + CANARY_DENIED + r'''")
+results["canary_open"] = cloudflare_answers("''' + CANARY_OPEN + r'''")
+
+# Private ranges, by address. TCP only; nothing is requested or read.
+for name, host in [("private_10", "10.0.0.1"), ("private_172", "172.16.0.1"),
+                   ("private_192", "192.168.0.1"), ("cgnat_100", "100.64.0.1")]:
+    results[name] = tcp_probe(host, 80)
+results["metadata_tcp"] = tcp_probe("169.254.169.254", 80)
+results["public_ipv6_tcp"] = tcp_probe("2606:4700:4700::1111", 443)
+
+# Rebinding: real public DNS names that resolve to private addresses
+# (sslip.io answers with the address written in the name). Connecting by name
+# must be stopped at the network layer, because a name check would pass it.
+for name, host in [("rebind_10", "10.0.0.1.sslip.io"), ("rebind_192", "192.168.0.1.sslip.io")]:
+    try:
+        address = socket.gethostbyname(host)
+    except OSError as exc:
+        results[name] = {"resolved": None, "reachable": False, "error": error_name(exc)}
+        continue
+    results[name] = dict(tcp_probe(address, 80), resolved=address)
+
+# The guest's own default gateway, read from the kernel routing table.
+gateway = None
+try:
+    with open("/proc/net/route") as table:
+        for line in table.readlines()[1:]:
+            fields = line.split()
+            if fields[1] == "00000000":
+                gateway = socket.inet_ntoa(bytes.fromhex(fields[2])[::-1])
+                break
+except OSError:
+    pass
+results["gateway"] = {"address": gateway,
+                      "tcp_80": tcp_probe(gateway, 80) if gateway else None}
+
+print(json.dumps(results))
+'''
+
+PUBLIC_MUST_REACH = ("public_example", "public_wikipedia", "canary_open")
+PUBLIC_MUST_BLOCK = ("canary_denied", "private_10", "private_172", "private_192",
+                     "cgnat_100", "public_ipv6_tcp", "rebind_10", "rebind_192")
+PUBLIC_INFORMATIONAL = ("public_boston_gov", "metadata_tcp")
+
+
+def evaluate_public_preflight(results: Mapping) -> Verdict:
+    """Judge a public-web run. Fails closed on missing or malformed results."""
+    failures, notes = [], []
+    for name in PUBLIC_MUST_REACH + PUBLIC_MUST_BLOCK + PUBLIC_INFORMATIONAL:
+        if _reachable(results, name) is None:
+            failures.append(f"{name}: missing or malformed result; the evidence is incomplete.")
+    for name in PUBLIC_MUST_REACH:
+        if _reachable(results, name) is False:
+            failures.append(f"{name}: unreachable; public browsing is not verified.")
+    for name in PUBLIC_MUST_BLOCK:
+        if _reachable(results, name) is True:
+            failures.append(f"{name}: a denied destination was reachable; do not enable public browsing.")
+    if _reachable(results, "canary_denied") is False and _reachable(results, "canary_open") is True:
+        denied = results["canary_denied"]
+        notes.append(f"canary: {CANARY_DENIED} gave no server answer (TLS {denied.get('tls')}, DNS "
+                     f"{denied.get('dns')}) while {CANARY_OPEN} answered, so the deny list is enforced; "
+                     "the private ranges are in the same list.")
+    for name in ("rebind_10", "rebind_192"):
+        entry = results.get(name)
+        if isinstance(entry, Mapping) and isinstance(entry.get("resolved"), str):
+            notes.append(f"{name}: public DNS resolved to {entry['resolved']}; connecting was "
+                         f"{'allowed' if entry.get('reachable') else 'blocked'}.")
+    if _reachable(results, "metadata_tcp") is True:
+        notes.append("metadata_tcp accepted: E2B's sandbox-local MMDS answers outside the firewall, "
+                     "even though 169.254.0.0/16 is denied.")
+    if _reachable(results, "public_boston_gov") is False:
+        notes.append("public_boston_gov unreachable: the demo target may be down or blocking this network.")
+    gateway = results.get("gateway")
+    if isinstance(gateway, Mapping) and isinstance(gateway.get("tcp_80"), Mapping):
+        notes.append(f"gateway {gateway.get('address')}: TCP 80 "
+                     f"{'connected' if gateway['tcp_80'].get('reachable') else 'did not connect'}"
+                     f" ({gateway['tcp_80'].get('error', 'no error')}).")
+    return Verdict(passed=not failures, failures=tuple(failures), notes=tuple(notes))
+
+
+def run_public_preflight(*, sandbox_type: Any = None) -> dict:
+    """Create a public-web desktop (plus the denied canary), probe, always destroy it."""
+    if sandbox_type is None:
+        from e2b_desktop import Sandbox
+
+        sandbox_type = Sandbox
+    from .e2b_desktop import public_network_config
+
+    sandbox = sandbox_type.create(timeout=240,
+                                  network=public_network_config([CANARY_DENIED + "/32"]),
+                                  lifecycle={"on_timeout": "kill"})
+    try:
+        result = sandbox.commands.run("python3 -c " + shlex.quote(PUBLIC_PROBE), timeout=170)
+        return json.loads(result.stdout)
+    finally:
+        sandbox.kill()

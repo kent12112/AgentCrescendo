@@ -8,7 +8,7 @@ See [visual architecture and technical decisions](visual-architecture.md) for th
 
 A user submits an everyday task. A coordinator interprets the goal, identifies missing essentials, and assigns work to agents operating separate E2B desktops. The user watches desktops, task progress, messages, and artifacts, and can redirect or cancel the run. The coordinator combines verified findings into a sourced deliverable.
 
-The application is general purpose within its initial capabilities: public-web research and artifact creation. Roles are assigned dynamically. Weekend-trip planning is the first acceptance scenario, not a hard-coded workflow. Product comparison and outing research are secondary generality checks.
+The application is general purpose within its initial capabilities: public-web research and artifact creation. Roles are assigned dynamically. Job search (find postings on public company boards, the user chooses, research the company, draft a sourced cover letter) is the primary acceptance scenario, not a hard-coded workflow ([decision 0007](decisions/0007-job-search-scenario.md)). Weekend-trip planning, product comparison, and outing research are secondary generality checks.
 
 Initial limits: private beta, at most three active worker desktops per run, default ten-minute execution deadline, configurable model budget, and 24-hour development retention. No personal-site logins, reservations, purchases, external messages, or autonomous publishing. A task requiring unsupported capabilities returns an explanation or partial result.
 
@@ -146,8 +146,8 @@ Keep infrastructure local initially: Docker Compose for API, workers, PostgreSQL
 
 ## Acceptance evidence
 
-1. Trip task produces a sourced itinerary, estimated budget, compatible times, explicit uncertainty, and a backup option. No fabricated date-specific availability.
-2. A non-travel task completes without changing the orchestration core, demonstrating generality.
+1. Job-search task returns postings that the browser actually showed (titles and URLs from the page, not the model), pauses for the user's choice, and produces a cover letter whose claims cite the resume profile or a visited company page. No fabricated postings, and no application typed or submitted ([decision 0007](decisions/0007-job-search-scenario.md)).
+2. A second task (weekend trip or product comparison) completes without changing the orchestration core, demonstrating generality.
 3. Terminate a worker mid-run; recover accepted findings and complete or return an honest partial result within limits.
 4. Deliver the same message twice; observe one effective state transition.
 5. Submit two patches against the same version; accept only one and reevaluate the other.

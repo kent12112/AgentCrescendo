@@ -13,3 +13,6 @@ coverage/
 .DS_Store
 .demo-artifacts/
 
+
+# Local job-search caches (JOB-F06): public job data, regenerated on demand.
+.cache/

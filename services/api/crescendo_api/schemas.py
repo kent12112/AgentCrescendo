@@ -56,8 +56,12 @@ class RunRead(RunCreate):
 
     # Declare id with type UUID.
     id: UUID
-    # Declare status with type Literal['draft'].
-    status: Literal["draft"]
+    # Lifecycle state; keep in sync with models.RUN_STATUSES.
+    status: Literal["draft", "starting", "started"]
     # Declare created_at with type datetime.
     created_at: datetime
+    # Stable Temporal workflow ID; null until a start is requested.
+    workflow_id: str | None = None
+    # When the start was first requested; null for drafts.
+    start_requested_at: datetime | None = None
 

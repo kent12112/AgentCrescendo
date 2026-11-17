@@ -24,6 +24,20 @@ from urllib.parse import urlsplit
 import re
 
 
+# IPv4 ranges a desktop must never reach in public-web mode (W1X-F02). E2B's firewall
+# denies them at the network layer, because a page or DNS name can lead anywhere.
+# private (RFC 1918), carrier-grade NAT, "this network", loopback, link-local and
+# cloud metadata, IETF protocol assignments, benchmarking, multicast, reserved.
+# IPv6 has no guest route today (W1-F10); re-check before relying on that.
+# 0.0.0.0/8 is left out: E2B rejects it ("invalid denied CIDR", live, November 16,
+# 2026), and Linux treats a connection to 0.x as this machine, not the network.
+PRIVATE_NETWORKS = (
+    "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16",
+    "172.16.0.0/12", "192.0.0.0/24", "192.168.0.0/16", "198.18.0.0/15",
+    "224.0.0.0/4", "240.0.0.0/4",
+)
+
+
 # Decorate the class with generated data-container methods; frozen=True prevents attribute
 # reassignment.
 @dataclass(frozen=True)
@@ -39,6 +53,10 @@ class TaskGrant:
     # anything not listed (localhost, 169.254.169.254, internal names) is denied.
     # Declare allowed_hosts with type frozenset[str].
     allowed_hosts: frozenset[str]
+    # Public-web mode (W1X-F02, opened further by W1X-F03): any public site instead
+    # of allowed_hosts, for page loads and for the model's own navigate. Defaults off
+    # so every existing grant keeps its exact allowlist.
+    public_web: bool = False
 
 
 # Decorate the class with generated data-container methods; frozen=True prevents attribute
@@ -79,6 +97,8 @@ class ScreenArea:
 
 # Largest coordinate accepted at all, matching the largest screenshot we accept.
 MAX_COORDINATE = 8192
+# Longest text type_text may enter: enough for a search query or a short field.
+MAX_TYPED_CHARS = 200
 
 
 # Define authorize with parameters grant, call.
@@ -90,14 +110,12 @@ def authorize(grant: TaskGrant, call: ToolCall, *, click_area: ScreenArea | None
     1. call.name must be in grant.allowed_tools. Otherwise deny.
     2. For "navigate":
        a. args["url"] must exist and be a str.
-       b. Parse it with urllib.parse.urlsplit; deny parsing errors. The scheme
-          must be exactly "https".
-       c. Use .hostname (already lowercased, userinfo removed). It must be in
-          grant.allowed_hosts. Do NOT use string tricks such as startswith or "in":
-          "en.wikipedia.org.evil.com" and "https://en.wikipedia.org@evil.com"
-          must both be denied.
-       d. Deny any explicit port (.port is not None). Reading .port can raise
-          ValueError for malformed ports; treat that as a denial too.
+       b. authorize_destination() decides: https only, no user name or
+          password, no explicit port, and .hostname (lowercased, userinfo
+          removed) must be in grant.allowed_hosts, or, in public-web mode, be
+          a public site name. Do NOT use string tricks such as startswith or
+          "in": "en.wikipedia.org.evil.com" and
+          "https://en.wikipedia.org@evil.com" must both be denied.
     3. For "search_page": require exactly one query string, nonblank, containing
        a word/number, and no longer than 200 characters. It searches the current
        page; it cannot supply a URL or widen navigation authority.
@@ -107,8 +125,13 @@ def authorize(grant: TaskGrant, call: ToolCall, *, click_area: ScreenArea | None
        clicks off the address bar, tabs, taskbar, and dock. What the click *hits*
        inside the page is checked separately by the desktop adapter.
     5. For "read_visible_links": no arguments. This permits reading visible link
-       labels and geometry; it does not capture an image or permit a click.
-    6. Anything that passes is allowed.
+       and field labels and geometry; it does not capture an image or permit a click.
+    6. For "type_text": args are exactly integer "x"/"y" (the field, in real
+       screen pixels, inside `click_area` as for click), "text" (one nonblank
+       line of printable characters, at most MAX_TYPED_CHARS), and boolean
+       "submit" (press Enter afterwards). Which field is under the point, and
+       that it really has keyboard focus, is checked by the desktop adapter.
+    7. Anything that passes is allowed.
 
     Every denial needs a short human-readable reason. The agent sees it in its
     transcript, so it must not reveal secrets, but should explain enough to replan.
@@ -161,49 +184,103 @@ def authorize(grant: TaskGrant, call: ToolCall, *, click_area: ScreenArea | None
             return Decision(False, "The browser page position is unknown, so clicks are not permitted.")
         if not click_area.contains(x, y):
             return Decision(False, f"Click at ({x}, {y}) is outside the browser page area.")
+
+    if call.name == "type_text":
+        x, y = call.args.get("x"), call.args.get("y")
+        text, submit = call.args.get("text"), call.args.get("submit")
+        if (set(call.args) != {"x", "y", "text", "submit"} or type(x) is not int or type(y) is not int
+                or not 0 <= x <= MAX_COORDINATE or not 0 <= y <= MAX_COORDINATE):
+            return Decision(False, "type_text requires integer x and y screen coordinates of a page field.")
+        # isprintable() is False for newlines, tabs, and other control characters: a
+        # newline would submit and a tab would move focus, outside what was checked.
+        if (not isinstance(text, str) or not text.strip() or len(text) > MAX_TYPED_CHARS
+                or not text.isprintable()):
+            return Decision(False, f"type_text requires one line of 1 to {MAX_TYPED_CHARS} printable characters.")
+        if type(submit) is not bool:
+            return Decision(False, "type_text requires submit to be true or false.")
+        if click_area is None:
+            return Decision(False, "The browser page position is unknown, so typing is not permitted.")
+        if not click_area.contains(x, y):
+            return Decision(False, f"Field at ({x}, {y}) is outside the browser page area.")
     # Check whether call.name equals 'navigate'.
     if call.name == "navigate":
         # 2a. Model output is untrusted: never assume the argument exists or is a str.
-        # Set url to call.args['url'], or None if absent.
         url = call.args.get("url")
-        # Check whether not (whether url is an instance of str).
         if not isinstance(url, str):
-            # Return Decision(False, 'navigate requires a url string.').
             return Decision(False, "navigate requires a url string.")
-        # 2b. urlsplit parses like a browser would; string matching does not.
-        # Try the following operations; matching except clauses handle failures.
-        try:
-            # Set parts to urlsplit(url).
-            parts = urlsplit(url)
-        # Handle ValueError; unmatched errors propagate.
-        except ValueError:
-            # Malformed model output is a denied proposal, not a reason to
-            # crash the run. Keep the parser's raw error out of the transcript.
-            # Return Decision(False, 'The URL is malformed.').
-            return Decision(False, "The URL is malformed.")
-        # Check whether parts.scheme does not equal 'https'.
-        if parts.scheme != "https":
-            # Return Decision(False, 'Only https URLs are permitted.').
-            return Decision(False, "Only https URLs are permitted.")
-        # 2c. .hostname is the real destination: lowercased, with any "user@" removed.
-        # "https://en.wikipedia.org@evil.com" has hostname "evil.com".
-        # Check whether parts.hostname is not in grant.allowed_hosts.
-        if parts.hostname not in grant.allowed_hosts:
-            # Return Decision(False, f"Host '{parts.hostname}' is not permitted for this task.").
-            return Decision(False, f"Host '{parts.hostname}' is not permitted for this task.")
-        # 2d. A non-default port can reach a different service on the same host.
-        # Try the following operations; matching except clauses handle failures.
-        try:
-            # Set port to parts.port.
-            port = parts.port
-        # Handle ValueError; unmatched errors propagate.
-        except ValueError:
-            # Return Decision(False, 'The URL has an invalid port.').
-            return Decision(False, "The URL has an invalid port.")
-        # Check whether port is not None.
-        if port is not None:
-            # Return Decision(False, 'Explicit ports are not permitted.').
-            return Decision(False, "Explicit ports are not permitted.")
+        # 2b. The destination rules are shared with the browser request filter. In
+        # public-web mode any public site is allowed, including one the model names
+        # itself (decision 0005 accepts that model-written URLs can carry data).
+        destination = authorize_destination(grant, url)
+        if not destination.allowed:
+            return destination
 
     # Return Decision(True, 'Permitted by task grant.').
+    return Decision(True, "Permitted by task grant.")
+
+
+
+# Names that point inside a network by convention, never to a public site.
+# Not complete (a public name can still resolve to a private address), which is
+# why E2B's firewall denies PRIVATE_NETWORKS; this check only refuses the obvious.
+INTERNAL_SUFFIXES = (".localhost", ".local", ".internal", ".home.arpa", ".lan",
+                     ".intranet", ".corp", ".private")
+
+
+def public_host_problem(host: str) -> str | None:
+    """Why `host` is not an acceptable public site name, or None if it is.
+
+    Refuses every IP address, including forms browsers read as IPv4 such as
+    "2130706433" or "0x7f.1" (the URL standard treats a numeric last label as
+    an address), single-label names, and conventional internal names.
+    """
+    import ipaddress
+
+    name = host.rstrip(".")
+    try:
+        ipaddress.ip_address(name)
+        return "IP addresses are not permitted; use a site name."
+    except ValueError:
+        pass
+    last = name.rsplit(".", 1)[-1]
+    if last.isdigit() or re.fullmatch(r"0x[0-9a-f]*", last):
+        return "IP addresses are not permitted; use a site name."
+    if "." not in name or not re.fullmatch(r"[a-z0-9.-]+", name):
+        return f"Host '{host}' is not a public site name."
+    if name == "localhost" or name.endswith(INTERNAL_SUFFIXES):
+        return f"Host '{host}' is an internal name."
+    return None
+
+
+def authorize_destination(grant: TaskGrant, url: str) -> Decision:
+    """May the browser fetch `url` for this task? Used for every request.
+
+    Independent of tools: the model's navigate tool, the host's start page, and
+    every request a page makes all pass through here. Rules, in order:
+    https only; no user:password@; no explicit port; then the host must be on
+    the grant's allowlist, or, in public-web mode, be a public site name.
+    """
+    if not isinstance(url, str):
+        return Decision(False, "The URL must be a string.")
+    try:
+        parts = urlsplit(url)
+        port = parts.port
+    except ValueError:
+        return Decision(False, "The URL is malformed.")
+    if parts.scheme != "https":
+        return Decision(False, "Only https URLs are permitted.")
+    if parts.username is not None or parts.password is not None:
+        return Decision(False, "URLs with a user name or password are not permitted.")
+    if port is not None:
+        return Decision(False, "Explicit ports are not permitted.")
+    host = parts.hostname
+    if not host:
+        return Decision(False, "The URL has no host.")
+    if grant.public_web:
+        problem = public_host_problem(host)
+        if problem is not None:
+            return Decision(False, problem)
+        return Decision(True, "Public site permitted by task grant.")
+    if host not in grant.allowed_hosts:
+        return Decision(False, f"Host '{host}' is not permitted for this task.")
     return Decision(True, "Permitted by task grant.")

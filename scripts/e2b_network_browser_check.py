@@ -160,15 +160,100 @@ def run(sandbox_type):
     print("All browser network checks passed. No model calls were made.")
 
 
+# ---------------------------------------------------------------------------
+# Public-web mode (W1X-F02): `--public`. Public hosts are now allowed, so the
+# questions change: do private destinations stay blocked, and does a public
+# NAME that resolves to a private address (DNS rebinding) get stopped? The
+# filter cannot see where a name resolves, so only E2B's firewall can stop it.
+# ---------------------------------------------------------------------------
+
+PUBLIC_MUST_LOAD = (ALLOWED_CSS, "https://www.boston.gov/")
+PUBLIC_MUST_NOT_LOAD = {
+    "https://10.0.0.1.sslip.io/rebind.css": "any",       # filter allows the name; firewall must stop it
+    "https://192.168.0.1.sslip.io/rebind.css": "any",
+    "https://10.0.0.1/private.css": "filter",            # IP literal: refused by the filter
+    "https://169.254.169.254/latest/meta-data/": "filter",
+    "https://localhost/local.css": "filter",
+    "https://example.com/image.png": "filter",           # images are still not an allowed type
+}
+PUBLIC_PAGE = (
+    "<html><head>"
+    f'<link rel="stylesheet" href="{ALLOWED_CSS.replace("&", "&amp;")}">'
+    '<link rel="stylesheet" href="https://10.0.0.1.sslip.io/rebind.css">'
+    '<link rel="stylesheet" href="https://192.168.0.1.sslip.io/rebind.css">'
+    '<link rel="stylesheet" href="https://10.0.0.1/private.css">'
+    '<link rel="stylesheet" href="https://localhost/local.css">'
+    "</head><body>"
+    '<img src="https://169.254.169.254/latest/meta-data/">'
+    '<img src="https://example.com/image.png">'
+    '<iframe src="https://www.boston.gov/"></iframe>'
+    "</body></html>"
+)
+
+
+def collect_public(desktop):
+    """Load the public-mode page in the real browser and record what happened to each URL."""
+    page = desktop.page
+    started, finished, failed = set(), set(), {}
+    page.on("request", lambda request: started.add(request.url))
+    page.on("requestfinished", lambda request: finished.add(request.url))
+    page.on("requestfailed", lambda request: failed.setdefault(request.url, request.failure))
+    # Do not wait for "load": the firewall drops packets to private addresses, so
+    # those requests hang instead of failing. Wait a fixed time, then record.
+    page.set_content(PUBLIC_PAGE, wait_until="commit", timeout=30000)
+    page.wait_for_timeout(25000)
+    blocked = set(desktop.blocked_requests)
+    states = {}
+    for url in [*PUBLIC_MUST_LOAD, *PUBLIC_MUST_NOT_LOAD]:
+        states[url] = ("loaded" if url in finished else "blocked_by_filter" if url in blocked
+                       else "failed_elsewhere" if url in failed
+                       else "pending" if url in started else "not_requested")
+    errors = {url: failed[url] for url in PUBLIC_MUST_NOT_LOAD if url in failed}
+    return {"subresources": states, "network_errors": errors}
+
+
+def judge_public(evidence):
+    """Return (passed, lines) for public-web mode."""
+    lines, passed = [], True
+    states = evidence["subresources"]
+    for url in PUBLIC_MUST_LOAD:
+        ok = states.get(url) == "loaded"
+        passed = passed and ok
+        lines.append(("PASS: " if ok else "FAIL: ") + f"public {url} loaded ({states.get(url)})")
+    for url, layer in PUBLIC_MUST_NOT_LOAD.items():
+        state = states.get(url)
+        ok = state == "blocked_by_filter" if layer == "filter" else state in (
+            "blocked_by_filter", "failed_elsewhere", "not_requested", "pending")
+        passed = passed and ok
+        lines.append(("PASS: " if ok else "FAIL: ") + f"{url} did not load ({state})")
+    return passed, lines
+
+
+def run_public(sandbox_type):
+    from crescendo_agent.e2b_desktop import open_e2b_desktop
+    from crescendo_security.policy import TaskGrant
+
+    grant = TaskGrant(str(uuid4()), frozenset(), frozenset(), public_web=True)
+    with open_e2b_desktop(grant, sandbox_type=sandbox_type, lifetime_seconds=180) as desktop:
+        evidence = collect_public(desktop)
+    print(json.dumps(evidence, indent=2))
+    passed, lines = judge_public(evidence)
+    print("\n".join(lines))
+    if not passed:
+        raise SystemExit("Public-mode browser network check failed; do not enable public browsing.")
+    print("All public-mode browser network checks passed. No model calls were made.")
+
+
 def main():
     from crescendo_agent.local_env import load_local_env
 
     load_local_env()
     if not os.environ.get("E2B_API_KEY"):
         raise SystemExit("Set E2B_API_KEY in this terminal. This check uses E2B resources.")
+    import sys
     from e2b_desktop import Sandbox
 
-    run(Sandbox)
+    run_public(Sandbox) if "--public" in sys.argv[1:] else run(Sandbox)
 
 
 if __name__ == "__main__":

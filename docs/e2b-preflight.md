@@ -227,3 +227,49 @@ mislabeled TLS closes as `ENOEXEC` (an OpenSSL code read as an OS errno); fixed
 and rerun. Live result: two preflight and two browser runs passed. Surprise:
 `8.8.8.8` is open on all ports, not only DNS; domain fronting succeeds. Both are
 outside the model's reach today and recorded as explicit narrowing.
+
+## Public-web mode (W1X-F02)
+
+Broad browsing has no host allowlist. E2B denies `PRIVATE_NETWORKS` (in
+`crescendo_security.policy`) and allows everything else; see
+[decision 0004](decisions/0004-public-web-mode.md). Check it with:
+
+```sh
+.venv/bin/python scripts/e2b_preflight.py --public
+.venv/bin/python scripts/e2b_network_browser_check.py --public
+```
+
+The preflight adds a **positive control**. Private targets usually have no
+listener, so "no connection" there proves nothing on its own. The public address
+`1.1.1.1` is added to the deny list and must give no answer, while its twin
+`1.0.0.1` must answer. Only server-proven answers count: a verified TLS handshake
+for `one.one.one.one`, or a reply to a DNS question.
+
+Results, November 16, 2026, two live runs of each check, identical:
+
+| Probe | Result |
+| --- | --- |
+| example.com, Wikipedia, boston.gov over HTTPS | HTTP 200 |
+| Canary `1.1.1.1` (denied) | No TLS (`SSLEOFError`), no DNS answer |
+| Twin `1.0.0.1` (not denied) | TLS verified, DNS answered |
+| `10.0.0.1`, `172.16.0.1`, `192.168.0.1`, `100.64.0.1` TCP 80 | Timed out |
+| `10.0.0.1.sslip.io`, `192.168.0.1.sslip.io` | Resolved to the private address; connect timed out |
+| Guest gateway `169.254.0.22` TCP 80 | Timed out |
+| Metadata `169.254.169.254` TCP 80 | Connected (MMDS exception, unchanged) |
+| IPv6 | No route (unchanged) |
+
+Browser check (`--public`): Wikipedia's stylesheet and the boston.gov page loaded.
+Stylesheets on the two rebinding names passed the filter, because they are
+public-looking names, and never got a response within 25 seconds. IP literals,
+metadata, `localhost`, and an image were refused by the filter.
+
+Mistakes and surprises, kept as evidence:
+
+- E2B rejected `0.0.0.0/8` (`400: invalid denied CIDR`); no desktop was created.
+- The first canary probe used a plain TCP connect to port 443, which
+  "connected" even though the address was denied: E2B's proxy accepts first and
+  judges afterwards. A two-configuration diagnostic with TLS and DNS proofs
+  showed the deny list was enforced all along. The probe was fixed; the judge
+  test keeps a reachable canary as a failure.
+- Requests the firewall drops hang rather than fail, so the browser check waits
+  a fixed time and records them as `pending`.

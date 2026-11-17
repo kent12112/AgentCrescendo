@@ -68,7 +68,8 @@ def run_vision_agent(goal, grant, desktop, model, *, max_steps=5,
         # Real screen size, before any downscaling: click coordinates are converted to it.
         screen_size = screenshot.size
         # DOM assistance is opt-in. The model gets labels/IDs, never URLs or selectors.
-        targets = desktop.visible_links() if link_grounding and "click" in grant.allowed_tools else []
+        targets = (desktop.visible_links()
+                   if link_grounding and {"click", "type_text"} & grant.allowed_tools else [])
         # Check whether max_image_width is not None.
         if max_image_width is not None:
             # Scale before saving so the saved PNG stays exactly what the model receives.
@@ -140,10 +141,21 @@ def run_vision_agent(goal, grant, desktop, model, *, max_steps=5,
         action = {"tool": call.name, "args": dict(call.args)}
         # Click preparation only for granted clicks; authorize() denies the rest unchanged.
         clicking = call.name in {"click", "click_link"} and "click" in grant.allowed_tools
+        # Typing is prepared the same way: the field ID becomes a checked screen point.
+        typing = call.name == "type_text" and "type_text" in grant.allowed_tools
         coordinate_problem = None
-        if clicking:
+        if clicking or typing:
             try:
-                if call.name == "click_link":
+                if typing:
+                    if not link_grounding:
+                        raise ActionDenied("Visible-field selection is not enabled.")
+                    if (set(call.args) != {"target_id", "text", "submit"}
+                            or type(call.args.get("target_id")) is not int):
+                        raise ActionDenied("type_text requires one integer target_id, text, and submit.")
+                    x, y = desktop.resolve_field(call.args["target_id"])
+                    call = ToolCall("type_text", {"x": x, "y": y, "text": call.args["text"],
+                                                  "submit": call.args["submit"]})
+                elif call.name == "click_link":
                     if not link_grounding:
                         raise ActionDenied("Visible-link selection is not enabled.")
                     if set(call.args) != {"target_id"} or type(call.args.get("target_id")) is not int:
@@ -171,11 +183,12 @@ def run_vision_agent(goal, grant, desktop, model, *, max_steps=5,
             return state.stop("deadline")
         # Set decision to authorize(grant, call).
         # Only clicks need the page area; asking for it costs a browser round trip.
-        area = desktop.click_area() if clicking and coordinate_problem is None else None
+        area = desktop.click_area() if (clicking or typing) and coordinate_problem is None else None
         decision = (Decision(False, coordinate_problem) if coordinate_problem is not None
                     else authorize(grant, call, click_area=area))
-        if decision.allowed and call.name not in {"scroll", "finish", "click"}:
-            decision = Decision(False, "This vision loop supports only scroll, click, and finish.")
+        if decision.allowed and call.name not in {"scroll", "finish", "click", "type_text", "navigate"}:
+            decision = Decision(False, "This vision loop supports only scroll, click, type_text, "
+                                       "navigate, and finish.")
         # Check whether decision.allowed and call.name equals 'finish' and not
         # (valid_finish(dict(call.args))).
         if decision.allowed and call.name == "finish" and not valid_finish(dict(call.args)):
@@ -213,6 +226,18 @@ def run_vision_agent(goal, grant, desktop, model, *, max_steps=5,
                 state.transcript.append(Entry("denied", decision.reason))
                 continue
             state.transcript.append(Entry("observation", "Authorized click completed. " + outcome))
+            continue
+        if call.name in {"type_text", "navigate"}:
+            try:
+                # The desktop re-checks the field and its keyboard focus, or the destination.
+                outcome = (desktop.type_text(**call.args) if call.name == "type_text"
+                           else desktop.navigate_and_report(call.args["url"]))
+            except (ActionDenied, ValueError) as denied:
+                decision = Decision(False, str(denied))
+                state.denied.append((call, decision))
+                state.transcript.append(Entry("denied", decision.reason))
+                continue
+            state.transcript.append(Entry("observation", f"Authorized {call.name} completed. " + outcome))
             continue
         # Call desktop.scroll with call.args['direction'], call.args['amount'].
         desktop.scroll(call.args["direction"], call.args["amount"])

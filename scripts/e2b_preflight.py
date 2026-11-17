@@ -3,13 +3,17 @@
 import json
 # Import os: reads process environment/configuration and OS facilities.
 import os
+# Import sys: reads the --public command-line flag.
+import sys
 
 # Import from crescendo_agent.local_env: load_local_env (loads root .env values without replacing
 # existing process values).
 from crescendo_agent.local_env import load_local_env
 # Import from crescendo_agent.e2b_preflight: evaluate_preflight (judges the raw results);
 # run_preflight (creates the desktop, probes, and destroys it).
-from crescendo_agent.e2b_preflight import evaluate_preflight, run_preflight
+from crescendo_agent.e2b_preflight import (
+    evaluate_preflight, evaluate_public_preflight, run_preflight, run_public_preflight,
+)
 
 
 # Define main with no parameters.
@@ -21,12 +25,14 @@ def main():
         # Raise SystemExit('Set E2B_API_KEY in your shell first. This check uses E2B resources.') to
         # stop the normal path.
         raise SystemExit("Set E2B_API_KEY in your shell first. This check uses E2B resources.")
-    # Set results to run_preflight().
-    results = run_preflight()
+    # --public tests public-web mode (W1X-F02): no allowlist, private ranges denied.
+    public = "--public" in sys.argv[1:]
+    # Set results to the chosen mode's raw probe results.
+    results = run_public_preflight() if public else run_preflight()
     # Print json.dumps(results, indent=2) so the raw evidence is always visible.
     print(json.dumps(results, indent=2))
-    # Set verdict to evaluate_preflight(results).
-    verdict = evaluate_preflight(results)
+    # Set verdict to the chosen mode's judgment.
+    verdict = evaluate_public_preflight(results) if public else evaluate_preflight(results)
     # Print each informational note.
     for note in verdict.notes:
         # Print note.

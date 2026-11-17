@@ -393,3 +393,88 @@ def test_tls_errors_are_named_by_type_not_by_openssl_code(probe_helpers):
     # OpenSSL's SSL_ERROR_EOF is 8; as an OS errno, 8 would wrongly read ENOEXEC.
     import ssl
     assert probe_helpers["error_name"](ssl.SSLEOFError(8, "EOF occurred in violation of protocol")) == "SSLEOFError"
+
+
+# ---------------------------------------------------------------------------
+# Public-web mode (W1X-F02).
+# ---------------------------------------------------------------------------
+
+from crescendo_agent.e2b_preflight import (
+    PUBLIC_MUST_BLOCK, PUBLIC_MUST_REACH, PUBLIC_PROBE, evaluate_public_preflight, run_public_preflight,
+)
+
+
+def public_results():
+    """The live result of November 16, 2026 (second public run), which passed."""
+    return {
+        "public_example": {"reachable": True, "http_status": 200},
+        "public_wikipedia": {"reachable": True, "http_status": 200},
+        "public_boston_gov": {"reachable": True, "http_status": 200},
+        "canary_denied": {"reachable": False, "tls": "SSLEOFError", "dns": "TimeoutError"},
+        "canary_open": {"reachable": True, "tls": "verified", "dns": "answered"},
+        "private_10": {"reachable": False, "error": "TimeoutError"},
+        "private_172": {"reachable": False, "error": "TimeoutError"},
+        "private_192": {"reachable": False, "error": "TimeoutError"},
+        "cgnat_100": {"reachable": False, "error": "TimeoutError"},
+        "metadata_tcp": {"reachable": True},
+        "public_ipv6_tcp": {"reachable": False, "error": "ENETUNREACH"},
+        "rebind_10": {"reachable": False, "error": "TimeoutError", "resolved": "10.0.0.1"},
+        "rebind_192": {"reachable": False, "error": "TimeoutError", "resolved": "192.168.0.1"},
+        "gateway": {"address": "169.254.0.22", "tcp_80": {"reachable": False, "error": "TimeoutError"}},
+    }
+
+
+def test_public_probe_compiles_and_emits_every_judged_name():
+    compile(PUBLIC_PROBE, "<public probe>", "exec")
+    for name in PUBLIC_MUST_REACH + PUBLIC_MUST_BLOCK:
+        assert f'"{name}"' in PUBLIC_PROBE or f"'{name}'" in PUBLIC_PROBE
+
+
+def test_public_live_result_passes_with_canary_and_rebinding_notes():
+    verdict = evaluate_public_preflight(public_results())
+    assert verdict.passed
+    joined = "\n".join(verdict.notes)
+    assert "the deny list is enforced" in joined
+    assert "rebind_10: public DNS resolved to 10.0.0.1; connecting was blocked." in joined
+
+
+@pytest.mark.parametrize("name", PUBLIC_MUST_BLOCK)
+def test_public_any_denied_destination_reachable_fails(name):
+    results = public_results()
+    results[name] = dict(results[name], reachable=True)
+    verdict = evaluate_public_preflight(results)
+    assert verdict.failures == (f"{name}: a denied destination was reachable; do not enable public browsing.",)
+
+
+def test_public_canary_reachable_means_deny_list_unproven():
+    # The first live attempt measured TCP 443, which E2B's proxy always accepts;
+    # only a real server answer counts, and a reachable canary must fail the run.
+    results = public_results()
+    results["canary_denied"] = {"reachable": True, "tls": "verified", "dns": "answered"}
+    verdict = evaluate_public_preflight(results)
+    assert not verdict.passed
+    assert not any("deny list is enforced" in note for note in verdict.notes)
+
+
+@pytest.mark.parametrize("name", PUBLIC_MUST_REACH)
+def test_public_required_destination_unreachable_fails(name):
+    results = public_results()
+    results[name] = dict(results[name], reachable=False)
+    assert f"{name}: unreachable; public browsing is not verified." in evaluate_public_preflight(results).failures
+
+
+def test_public_missing_result_fails_closed():
+    results = public_results()
+    del results["rebind_10"]
+    assert evaluate_public_preflight(results).failures == (
+        "rebind_10: missing or malformed result; the evidence is incomplete.",)
+
+
+def test_public_preflight_denies_private_ranges_plus_canary_and_cleans_up():
+    from crescendo_security.policy import PRIVATE_NETWORKS
+    factory = Mock()
+    factory.create.return_value.commands.run.return_value.stdout = "{}"
+    assert run_public_preflight(sandbox_type=factory) == {}
+    network = factory.create.call_args.kwargs["network"]
+    assert network == {"deny_out": [*PRIVATE_NETWORKS, "1.1.1.1/32"], "allow_public_traffic": False}
+    factory.create.return_value.kill.assert_called_once_with()

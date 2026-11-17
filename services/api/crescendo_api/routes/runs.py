@@ -1,4 +1,4 @@
-"""Persisted draft endpoints; these routes do not execute agents."""
+"""Run endpoints: draft CRUD plus an idempotent hand-off to Temporal (no agent work yet)."""
 # Import from typing: Annotated (attaches framework metadata, such as Depends, to a Python type).
 from typing import Annotated
 # Import from uuid: UUID (parses/types UUID identifiers so malformed route IDs are rejected).
@@ -22,6 +22,9 @@ from ..auth import require_local_token
 from ..database import get_session
 # Import from ..models: Run (maps the persisted draft row).
 from ..models import Run
+# Start logic lives in a service module so the reconciler can reuse it.
+from ..run_start_service import RunNotFound, start_run as start_run_service
+from ..run_starter import RunStarter, RunStartUnavailable, get_run_starter
 # Import from ..schemas: RunCreate (validates incoming draft JSON and limits); RunRead (serializes
 # persisted drafts with generated IDs and timestamps).
 from ..schemas import RunCreate, RunRead
@@ -30,6 +33,8 @@ from ..schemas import RunCreate, RunRead
 router = APIRouter(dependencies=[Depends(require_local_token)])
 # Set SessionDep to Annotated[Session, Depends(get_session)].
 SessionDep = Annotated[Session, Depends(get_session)]
+# Tests replace this dependency with a fake; production uses the Temporal client.
+StarterDep = Annotated[RunStarter, Depends(get_run_starter)]
 
 
 # Register this function as the route for the indicated HTTP method or WebSocket path; dependencies
@@ -105,3 +110,18 @@ def delete_run(run_id: UUID, session: SessionDep):
     # Return Response(status_code=204).
     return Response(status_code=204)
 
+
+@router.post("/runs/{run_id}/start", response_model=RunRead, status_code=202)
+async def start_run(run_id: UUID, session: SessionDep, starter: StarterDep):
+    """Idempotent start: any number of calls for one run create one workflow.
+
+    202 means Temporal has accepted the run (it runs asynchronously). Repeating
+    the request returns the same workflow_id. 503 means the start is recorded but
+    not yet confirmed; retrying is safe and lands on the same workflow.
+    """
+    try:
+        return await start_run_service(session, starter, str(run_id))
+    except RunNotFound:
+        raise HTTPException(status_code=404, detail="Run not found")
+    except RunStartUnavailable:
+        raise HTTPException(status_code=503, detail="Execution service unavailable; retry the start")

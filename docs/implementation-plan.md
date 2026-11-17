@@ -129,7 +129,54 @@ Placed after Week 1 exit and before Week 3 multi-agent work, per
 W1-F10 network evidence.
 
 - [x] W1X-F01: `click(x, y)` with the real desktop pointer, authorized only inside the browser page area; every resulting request still passes the browser filter and E2B firewall. Tests: clicks outside the page area denied, POST form blocked, link to a blocked host blocked, download blocked; live case following a link between two pages. November 16, 2026: 23 live fixture checks passed and two complete Boston → Massachusetts demos passed. Model-facing selection now uses visible link IDs resolved into guarded real-pointer clicks; raw screenshot-only pixel aiming remains unreliable. This explicit interface adjustment is recorded in [decision 0002](decisions/0002-visible-link-grounding.md) and [clicking](e2b-clicking.md).
-- [ ] W1X-F02: Broad public browsing: allow public destinations while blocking private, link-local, metadata, and backend addresses (proven in W1-F10). The model moves between pages only by clicking existing links or search results, never by composing URLs. Agents never hold credentials.
+- [x] W1X-F02: Broad public browsing: allow public destinations while blocking private, link-local, metadata, and backend addresses (proven in W1-F10). The model moves between pages only by clicking existing links or search results, never by composing URLs. Agents never hold credentials. Completed November 16, 2026 as public-web mode ([decision 0004](decisions/0004-public-web-mode.md)): E2B denies private ranges (canary-proven), rebinding names blocked live, model navigate refused, `click_link` only; two live passes of the boston.gov demo. Search results are not covered: no typing tool exists. Public pages are partly readable because fonts and images stay blocked.
+- [ ] W1X-F03: Open browsing in public-web mode: the model may `navigate` to any public site and `type_text` into page text fields (search boxes), never into browser controls. Typed text leaves only through a GET form submission that passes the same destination check. Accepted risk and checks in [decision 0005](decisions/0005-open-browsing.md). November 17, 2026: implemented with 567 local tests and a local Edge field check; live demo `scripts/e2b_open_browse_demo.py` not yet run.
+
+### Job-search track (decided November 17, 2026)
+
+Primary scenario per [decision 0007](decisions/0007-job-search-scenario.md). Single-desktop
+slices first; multi-agent steps land with Weeks 3–4.
+
+- [x] JOB-F00: ATS posting sources (host, no desktop). Fetch and normalize public postings
+  from Greenhouse, Lever, and Ashby job-board APIs for a list of `source:company` boards;
+  rebuild posting URLs from checked IDs; bound size/time; one board's failure doesn't stop
+  others. November 17, 2026: 31 offline tests; a live `scripts/fetch_jobs.py` run fetched
+  659 + 301 + 839 postings and reported a missing board as a clean 404.
+  See the [decision 0007 update](decisions/0007-job-search-scenario.md#update-november-17-2026-discovery-uses-ats-apis-job-f00).
+- [ ] JOB-F01: Offer finder. On a public Greenhouse or Lever company board, the model scrolls
+  and follows links, then finishes with link IDs only. The host accepts an ID only when the
+  browser shows it linking to a posting on the same board, with a non-button label. Titles
+  and URLs come from the page. Acceptance: local tests, the local Edge smoke check
+  `scripts/smoke_offer_links.py`, then a live `scripts/e2b_offer_finder_demo.py` pass on each
+  platform, watched by the user. November 17, 2026: 49 offline tests and the Edge smoke
+  check passed; no live run yet.
+- [ ] JOB-F02: Resume + search words → ranked postings (`scripts/find_jobs.py`). Companies
+  come from recent HN "Who is hiring?" threads (+ optional file), postings from JOB-F00,
+  and a local keyword score (30% title match, 70% smoothed skill coverage) with link,
+  matched skills, gaps, years asked, location, pay, and age. November 17, 2026: 25 offline
+  tests; live run with a fictional sample resume: 78 boards, 2,526 postings, 92 title
+  matches in 7 s. Real-resume run: vocabulary extended (25 -> 38 skills), early-career/location
+  filters and duplicate grouping added; 12 HN months gave 8 relevant New York/US roles. Open: the
+  user's judgment of the ranking and broader company coverage.
+- [ ] JOB-F03: User choice gate between offers and research (needs W4-F02 run commands).
+- [ ] JOB-F04: Company research on the chosen posting's public pages, with sources.
+- [ ] JOB-F05: Cover letter whose claims cite the profile or a visited page.
+- [ ] JOB-F06: Company coverage from Common Crawl (Ashby first). Read the public Common Crawl
+  URL index for `jobs.ashbyhq.com/*` over the latest few monthly crawls, keep checked company
+  slugs, and cache the list (~monthly) and each board's postings (~daily) locally so a search
+  does not depend on the index being up. Add a country filter from Ashby's structured address
+  so "US only, remote OK" excludes remote-abroad roles. Acceptance: offline tests, one live
+  discovery run, and a ranked run on the user's resume with more companies than HN alone.
+  November 17, 2026: 52 offline tests; live 3,137 Ashby companies (2 of 6 crawls, rest HTTP
+  504); 133 US matches in 16 s from cache vs 12 from HN. Discovery moved to the background
+  `scripts/refresh_job_companies.py` (not yet run live). Awaiting the user's review.
+- [ ] JOB-F07: Daily Ashby crawl into Postgres ([decision 0008](decisions/0008-job-storage-daily-crawl.md)).
+  Migration 0004 (companies, postings with first/last seen and closed dates, crawl runs);
+  postings published in the last 30 days; only boards that answered close postings;
+  `find_jobs.py` reads the database; launchd runs `scripts/crawl_jobs_daily.py` daily.
+  Acceptance: offline tests (SQLite + migration check), one live crawl into the local
+  Postgres, a ranked search from the database, the launchd agent installed and observed
+  running once.
 
 ## Week 2 — Durable run lifecycle
 
@@ -140,8 +187,8 @@ W1-F10 network evidence.
 
 ### Feature checklist
 
-- [ ] W2-F01: Temporal workflow/activities with stable start IDs that prevent duplicate run starts.
-- [ ] W2-F02: Activity heartbeats, bounded retries, cancellation, and timeouts.
+- [x] W2-F01: Temporal workflow/activities with stable start IDs that prevent duplicate run starts. Completed November 17, 2026: real Temporal dev server tests (concurrent and post-completion duplicates gave one execution; random-ID control gave two) and a live 10-request check through the API; user-reviewed. Temporal runs from `scripts/temporal_dev_server.py`; a Compose service is deferred to W2-F02 ([decision 0006](decisions/0006-stable-run-start.md), [handoff](handoffs/2026-11-17-claude-w2-f01-stable-start.md)).
+- [ ] W2-F02: Activity heartbeats, bounded retries, cancellation, and timeouts. Also add a Temporal service to Compose with persistent history (deferred from W2-F01).
 - [ ] W2-F03: Persist run/task state, findings, artifact references, and desktop leases.
 - [ ] W2-F04: Checkpoint completed visual steps and source findings; distinguish a proposed action from an executed action and avoid blindly replaying uncertain desktop effects.
 - [ ] W2-F05: Reserve model usage before admission and reconcile actual usage afterward.
@@ -175,7 +222,7 @@ Exit: workers exchange a finding and a handoff; duplicate delivery changes state
 
 * Build prompt interpretation, missing-information clarification, and run commands.
 * Add task status, message timeline, artifact access, and resumable SSE events.
-* Complete the weekend-trip benchmark with provenance, budget/timing checks, and partial-result handling.
+* Complete the job-search benchmark with provenance, budget/timing checks, and partial-result handling ([decision 0007](decisions/0007-job-search-scenario.md); was the weekend trip).
 * Run a product-comparison task using the same runtime to check generality.
 
 ### Feature checklist
@@ -186,7 +233,7 @@ Exit: workers exchange a finding and a handoff; duplicate delivery changes state
 - [ ] W4-F04: Display proposed/completed/denied actions and message timeline without presenting proposed actions as executed ones.
 - [ ] W4-F05: Serve authorized artifacts and sourced final results with usable provenance links.
 - [ ] W4-F06: Resume SSE from an event cursor and restore run/event state after dashboard reconnect.
-- [ ] W4-F07: Finish the weekend-trip benchmark with budget/timing checks, provenance, and useful partial results.
+- [ ] W4-F07: Finish the job-search benchmark (offers → user choice → company research → sourced cover letter) with budget/timing checks, provenance, and useful partial results. The weekend trip moves to a generality check alongside W4-F08.
 - [ ] W4-F08: Complete a product-comparison task through the same runtime and visual tools.
 - [ ] W4-F09: Compare equivalent tasks against a single-agent baseline using the same budget; record when coordination helps or adds overhead.
 

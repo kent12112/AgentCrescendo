@@ -8,9 +8,8 @@ export type Run = {
   // Declare this property’s compile-time type: goal: string;. A ? marks an optional property; |
   // null permits explicit absence.
   goal: string;
-  // Set this named object/configuration property: status: "draft";. The receiving API determines
-  // how the value is used.
-  status: "draft";
+  // Lifecycle state; mirrors the API's RunRead.status values.
+  status: "draft" | "starting" | "started";
   // Declare this property’s compile-time type: max_workers: number;. A ? marks an optional
   // property; | null permits explicit absence.
   max_workers: number;
@@ -26,5 +25,9 @@ export type Run = {
   // Declare this property’s compile-time type: created_at: string;. A ? marks an optional property;
   // | null permits explicit absence.
   created_at: string;
+  // Stable Temporal workflow ID; null while the run is a draft.
+  workflow_id: string | null;
+  // When the start was first requested; null while the run is a draft.
+  start_requested_at: string | null;
 };
 

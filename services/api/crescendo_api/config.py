@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     # representations; it is not encryption and must still be kept out of logs.
     # Define dev_api_token with these defaults and validation rules: min_length=32.
     dev_api_token: SecretStr = Field(min_length=32)
+    # Temporal frontend address and namespace used by POST /runs/{id}/start. The
+    # defaults match a local development server.
+    temporal_address: str = "127.0.0.1:7233"
+    temporal_namespace: str = "default"
 
     # Register field validation/normalization to run during Pydantic model validation.
     @field_validator("dev_api_token")
