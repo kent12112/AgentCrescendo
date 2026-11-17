@@ -1,6 +1,6 @@
 # Current development status
 
-Updated: November 16, 2026, by Claude.
+Updated: November 16, 2026, by Codex.
 Implementation baseline: `584e662`.
 Current milestone: Week 1 — one useful, constrained desktop agent.
 
@@ -25,6 +25,34 @@ This is an evidence summary, not a declaration that Week 1 is complete.
   provider rate limits; model reasons recorded.
 - A user-reported live text research run answered Boston and reported the same
   Wikipedia URL as its source and visited page. This is one run, not a benchmark.
+- Link-following (W1X-F01): two complete live Boston → Massachusetts passes at
+  768/1024 image widths. The model selects a visible link ID; the browser measures
+  the point and the existing guarded real pointer clicks it. 23 live fixture
+  checks passed; 334 Python tests passed. This is DOM-assisted selection, not
+  screenshot-only pixel grounding. See [clicking](e2b-clicking.md) and the
+  [aiming handoff](handoffs/2026-11-16-codex-link-grounding.md).
+- Visible-link metadata now requires explicit `read_visible_links` permission
+  rather than screenshot permission; click permission remains required. The demo
+  grants it only in link mode. 402 local tests passed; no live rerun for this
+  change. See [permission handoff](handoffs/2026-11-16-codex-visible-link-permission.md).
+- Vision request recovery: one retry shared across timeouts, rate limits, and
+  transient server errors; clean failure statuses and saved diagnostics. Click
+  demo request timeout is configurable (45-second default, at most 60 seconds).
+  362 Python tests passed. After one live Groq over-capacity response, a final
+  Boston → Massachusetts run passed in 54.5 seconds. See
+  [timeout handoff](handoffs/2026-11-16-codex-vision-timeout.md).
+- Source startup recovery: click demo validates HTTP success plus article
+  presence, retries temporary responses once, and saves startup failure evidence
+  before any model calls. 379 local tests passed; a final live Boston →
+  Massachusetts run passed in 24.3 seconds. The user's original Wikimedia error
+  could not be reproduced or classified from its title alone. See
+  [source startup handoff](handoffs/2026-11-16-codex-source-startup.md).
+- Viewer asset recovery: session-scoped HTTP pool, one transport retry, optional
+  icon failures no longer abort readiness, and saved click-demo viewer failure
+  diagnostics. 393 Python tests and the local Edge smoke passed. A real
+  Edge/E2B check rendered the desktop despite controlled essential/optional file
+  failures; no model calls. See
+  [viewer recovery handoff](handoffs/2026-11-16-codex-viewer-connection.md).
 - Before baseline commit: 194 Python tests passed; web TypeScript checking and
   production build passed. These checks do not establish live E2B behavior.
 
@@ -46,10 +74,61 @@ All tasks below are unassigned. Claim only the task you are actually starting.
 | W1-5 | Record a cited research trace, provider termination evidence, and remaining limitations; reconcile README with implemented CLI demos and draft-only dashboard | Unassigned | Open; termination evidence done (F11, [termination](e2b-termination.md)); trace and README remain |
 | W1-6 | Connect permitted public-page research to screenshot observation and model-selected scrolling; produce a cited answer while the user watches the same desktop (plan W1-F09) | Unassigned | Done (F09): user watched a live Wikipedia pass with a cited, on-screen-verified answer; see [W1-6 handoff](handoffs/2026-11-13-claude-w1-6-visual-research.md) |
 
-Suggested next task: W1-3 (network checks), the gate for broad public browsing (W1X-F02); then W1X-F01 clicking. Do not start Week 2 orchestration
+Suggested next task: W1-3 (network checks), the gate for broad public browsing (W1X-F02). Do not start Week 2 orchestration
 on the assumption that Week 1's networking and live-view boundaries are resolved.
 
 ## Active ownership
+
+READ-VISIBLE-LINKS completed and released by Codex on November 16, 2026. Replaced
+the screenshot-permission check inside `visible_links()` with explicit
+`read_visible_links` authorization. Updated policy, demo/check grants, tests, and
+clicking/learning docs. 115 focused and 402 full local tests passed; one existing
+Starlette/httpx deprecation warning. No live provider calls. Existing uncommitted
+work preserved. See [handoff](handoffs/2026-11-16-codex-visible-link-permission.md).
+Uncommitted.
+
+VIEWER-CONNECTION completed and released by Codex on November 16, 2026 after a
+user-reported `_CONNECTION_ERROR` at the viewer gate. Reproduced false fatal
+readiness from an optional favicon failure; the exact original network failure
+was not reproduced. Added pooled viewer asset requests, one transport retry,
+essential-file-only gate errors, safe error categories, and click-demo saved
+viewer failure results with zero model calls. 393 tests and the local browser
+smoke passed. A real Edge/E2B probe rendered the fixture despite one controlled
+essential JS failure and two optional icon failures; image inspected. Existing
+uncommitted work preserved. See
+[viewer recovery handoff](handoffs/2026-11-16-codex-viewer-connection.md). Uncommitted.
+
+SOURCE-STARTUP completed and released by Codex on November 16, 2026 after a
+user-reported Wikimedia error page. Added status/Retry-After metadata, a bounded
+startup retry for temporary responses, HTTP-plus-article validation, and saved
+startup screenshots/results with zero model calls on failure. 379 local tests
+passed. A model-free E2B probe loaded Boston with HTTP 200; a final complete
+click demo passed in 24.3 seconds. The reported original failure had no saved
+startup screenshot/status, so its exact cause remains unknown. Existing changes
+were preserved. See the
+[source startup handoff](handoffs/2026-11-16-codex-source-startup.md). Uncommitted.
+
+VISION-TIMEOUT completed and released by Codex on November 16, 2026 after the
+user reported `groq.APITimeoutError`. Added bounded model-request retries and
+sanitized `model_timeout`/`model_unavailable` results, configurable click-demo
+request timeout, and SDK/loop/CLI failure-injection checks. 362 local tests
+passed. One live request returned Groq 503 over capacity; a final run passed
+Boston → Massachusetts with the normal click guards in 54.5 seconds. This
+does not prove the cause of the user's earlier timeout. Existing uncommitted
+work was preserved. See the
+[timeout handoff](handoffs/2026-11-16-codex-vision-timeout.md). Uncommitted.
+
+W1X-F01 aiming fix completed and released by Codex, November 16, 2026. The user
+explicitly requested takeover of Claude's earlier in-progress task. Original
+click/security work was preserved. Visible-link grounding fixes model-selected
+link interaction; two complete live demos passed, along with 23 browser fixture
+checks and 334 local Python tests. Raw pixel aiming and a normalized-coordinate
+replay still miss, so no screenshot-only grounding claim is made. One earlier
+grounded run opened the correct article but failed the demo due to final-answer
+throttling; the click demo now allows one deadline-bounded wait up to 60 seconds.
+See [aiming handoff](handoffs/2026-11-16-codex-link-grounding.md),
+[decision](decisions/0002-visible-link-grounding.md), and the preserved
+[original handoff](handoffs/2026-11-16-claude-w1x-f01-click.md). Uncommitted.
 
 W1-F11 (provider termination) completed and released by Claude on November 16,
 2026. The adapter now sets `on_timeout: kill` explicitly. A new live check confirms

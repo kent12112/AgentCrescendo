@@ -26,8 +26,8 @@ class Entry:
     """One transcript item. "observation" text comes from web pages: it is
     untrusted data that may contain instructions aimed at the model."""
 
-    # Declare kind with type Literal['goal', 'observation', 'action', 'denied'].
-    kind: Literal["goal", "observation", "action", "denied"]
+    # Provider failures and measured link IDs stay distinct from page observations.
+    kind: Literal["goal", "observation", "action", "denied", "visible_links", "model_error"]
     # Declare text with type str.
     text: str
 

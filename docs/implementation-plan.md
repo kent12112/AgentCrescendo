@@ -128,7 +128,7 @@ Placed after Week 1 exit and before Week 3 multi-agent work, per
 [decision 0001](decisions/0001-product-positioning.md). Broad browsing depends on
 W1-F10 network evidence.
 
-- [ ] W1X-F01: `click(x, y)` with the real desktop pointer, authorized only inside the browser page area; every resulting request still passes the browser filter and E2B firewall. Tests: clicks outside the page area denied, POST form blocked, link to a blocked host blocked, download blocked; live case following a link between two pages.
+- [x] W1X-F01: `click(x, y)` with the real desktop pointer, authorized only inside the browser page area; every resulting request still passes the browser filter and E2B firewall. Tests: clicks outside the page area denied, POST form blocked, link to a blocked host blocked, download blocked; live case following a link between two pages. November 16, 2026: 23 live fixture checks passed and two complete Boston → Massachusetts demos passed. Model-facing selection now uses visible link IDs resolved into guarded real-pointer clicks; raw screenshot-only pixel aiming remains unreliable. This explicit interface adjustment is recorded in [decision 0002](decisions/0002-visible-link-grounding.md) and [clicking](e2b-clicking.md).
 - [ ] W1X-F02: Broad public browsing: allow public destinations while blocking private, link-local, metadata, and backend addresses (proven in W1-F10). The model moves between pages only by clicking existing links or search results, never by composing URLs. Agents never hold credentials.
 
 ## Week 2 — Durable run lifecycle

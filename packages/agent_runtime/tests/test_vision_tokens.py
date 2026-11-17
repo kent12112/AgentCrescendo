@@ -227,3 +227,24 @@ def test_loop_stops_cleanly_when_rate_limit_cannot_be_absorbed(delays, capture_s
     # Assert that clock.now is at most capture_seconds plus MAX_RATE_LIMIT_WAIT. If false, this
     # check fails with AssertionError.
     assert clock.now <= capture_seconds + MAX_RATE_LIMIT_WAIT
+
+
+@pytest.mark.parametrize("deadline, expected, elapsed", [(120, "finished", 45), (30, "rate_limited", 0)])
+def test_opt_in_longer_rate_limit_wait_still_respects_deadline(deadline, expected, elapsed):
+    clock, desktop, model = Clock(), Mock(), Mock()
+    desktop.capture_screen.return_value = png(8, 8)
+    model.decide.side_effect = [RateLimited(45), FINISH]
+    result = run_vision_agent("g", GRANT, desktop, model, clock=clock, sleep=clock.sleep,
+                              deadline_seconds=deadline, max_rate_limit_wait=60)
+    assert result.status == expected and clock.now == elapsed
+    desktop.scroll.assert_not_called()
+
+
+def test_longer_rate_limit_wait_still_retries_only_once():
+    clock, desktop, model = Clock(), Mock(), Mock()
+    desktop.capture_screen.return_value = png(8, 8)
+    model.decide.side_effect = [RateLimited(45), RateLimited(45), FINISH]
+    result = run_vision_agent("g", GRANT, desktop, model, clock=clock, sleep=clock.sleep,
+                              max_rate_limit_wait=60)
+    assert result.status == "rate_limited" and clock.now == 45
+    assert model.decide.call_count == 2

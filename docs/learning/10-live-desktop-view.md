@@ -141,3 +141,59 @@ but a slow run could lose the desktop mid-task.
 
 References: [E2B desktop streaming](https://github.com/e2b-dev/desktop),
 [WebSocket client API](https://websockets.readthedocs.io/en/stable/reference/asyncio/client.html).
+
+## Asset connection recovery (November 16, 2026)
+
+The user reported a `_CONNECTION_ERROR` while `wait_for_viewer` was waiting.
+This suffix matches `UPSTREAM_ASSET_CONNECTION_ERROR`: failure fetching a viewer
+file, before the model loop. The old proxy collapsed all HTTP transport errors
+into that one code and made every asset failure fatal, including an optional
+favicon. A controlled check reproduced fatal readiness from a failed favicon
+even though the essential HTML loaded. This does not prove which file or network
+condition caused the user's original failure.
+
+The viewer now owns one HTTP client for its lifetime, with a bounded pool and
+explicit cleanup. Each asset GET can retry one transport failure after 250 ms.
+Required HTML, JavaScript, and CSS failures still fail the connection gate;
+optional icon/image failures return an error for that file without invalidating
+viewer readiness. HTTP refusals and redirects are not retried or followed.
+Error codes distinguish connect/read/pool timeouts, connection/proxy failures,
+and protocol errors without exposing raw exception text or credentials.
+
+The click demo saves `status: viewer_unavailable`, safe error codes, source
+metadata, `model_calls: 0`, and a best-effort `viewer-desktop.png` when the gate
+fails under `--save-screenshots`. That PNG shows the underlying E2B desktop,
+not the person's local browser. Context managers still close the viewer/desktop.
+The person must still see the desktop and press Enter before the agent starts.
+
+Verification:
+
+- 393 Python tests passed, including controlled asset failures, bounded retries,
+  pool lifetime, authorization, safe failure output, and pre-model cleanup.
+- `scripts/smoke_live_view.py` passed with real local Edge and a simulated
+  upstream. A sandboxed attempt first failed to bind loopback; rerunning with
+  the appropriate local execution permission passed.
+- A real Edge/E2B check completed VNC authentication and rendered actual desktop
+  pixels despite one injected essential JavaScript connection failure and two
+  injected optional favicon failures. The resulting screenshot was inspected
+  and visibly shows “VIEWER CONNECTION PROBE”. No model or Wikipedia calls.
+  Artifact: `.demo-artifacts/viewer-probe-dc827275cba34d15aee25dbfb21449cf/`.
+- The first probe's connection event preceded its first screen frame, producing
+  a black screenshot. The final verifier waits for painted canvas pixels as
+  well as connection state. Connection alone remains insufficient rendering
+  evidence.
+
+Repeat the controlled live check with:
+
+```sh
+.venv/bin/python scripts/e2b_live_view_check.py
+```
+
+This creates one metered E2B desktop and uses installed Microsoft Edge. It logs
+sanitized file paths/status categories only. It uses a controlled page and
+controlled local transport failures, so it checks the viewer independently of
+Wikipedia and model availability. It does not establish general viewer
+reliability or reproduce the user's original network failure.
+
+See [handoff](../handoffs/2026-11-16-codex-viewer-connection.md) and
+[HTTPX connection-pooling guidance](https://www.python-httpx.org/async/).

@@ -2,7 +2,7 @@
 # Import asyncio: runs concurrent async tasks for streaming and coordination.
 import asyncio
 # Import from contextlib: contextmanager (turns a generator into a with-block resource lifetime).
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 # Import from dataclasses: dataclass (generates data-container initialization and comparison
 # methods); field (configures a dataclass field, including per-instance factories and repr hiding).
 from dataclasses import dataclass, field
@@ -85,8 +85,16 @@ def create_viewer_app(host, traffic_token, vnc_password, secret, local_origin, *
     if not host or any(character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-" for character in host):
         # Raise ValueError('Invalid desktop stream host.') to stop the normal path.
         raise ValueError("Invalid desktop stream host.")
-    # Set app to FastAPI(docs_url=None, redoc_url=None, openapi_url=None).
-    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    @asynccontextmanager
+    async def lifespan(app):
+        # noVNC loads dozens of modules/icons. Reuse this session's connections,
+        # and close them with the loopback server rather than per browser request.
+        async with httpx.AsyncClient(timeout=10, follow_redirects=False, transport=transport,
+                                     limits=httpx.Limits(max_connections=8, max_keepalive_connections=8)) as client:
+            app.state.asset_client = client
+            yield
+
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     # Call app.add_middleware with TrustedHostMiddleware.
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1"])
     # Set headers to {'e2b-traffic-access-token': traffic_token}.
@@ -249,23 +257,25 @@ def create_viewer_app(host, traffic_token, vnc_password, secret, local_origin, *
         if not authorized(request.cookies):
             # Return Response(status_code=403, headers=private_headers).
             return Response(status_code=403, headers=private_headers)
+        essential = path == "vnc.html" or path.endswith((".js", ".css"))
         # The host is fixed from this sandbox's SDK. Browser input can select
         # only a path on that host; no browser cookies or auth headers are forwarded.
         # Try the following operations; matching except clauses handle failures.
         try:
-            # Asynchronously enter httpx.AsyncClient(timeout=10, follow_redirects=False,
-            # transport=transport) as client. The context manager controls setup/exit; inspect it
-            # for the actual cleanup behavior.
-            async with httpx.AsyncClient(timeout=10, follow_redirects=False, transport=transport) as client:
-                # Set upstream to await client.get('https://' + host + '/' + path,
-                # params=request.query_params, headers=headers).
-                upstream = await client.get("https://" + host + "/" + path,
-                                            # Pass keyword params = request.query_params.
-                                            params=request.query_params, headers=headers)
+            for attempt in range(2):
+                try:
+                    upstream = await app.state.asset_client.get("https://" + host + "/" + path,
+                                                               params=request.query_params, headers=headers)
+                except (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError):
+                    if attempt == 1:
+                        raise
+                    await asyncio.sleep(0.25)
+                else:
+                    break
             # Check whether upstream.status_code does not equal 200.
             if upstream.status_code != 200:
                 # Check whether on_error and path equals 'vnc.html' or path.endswith('.js').
-                if on_error and (path == "vnc.html" or path.endswith(".js")):
+                if on_error and essential:
                     # Call on_error with 'UPSTREAM_ASSET_HTTP_' plus upstream.status_code converted
                     # to a string.
                     on_error("UPSTREAM_ASSET_HTTP_" + str(upstream.status_code))
@@ -278,11 +288,21 @@ def create_viewer_app(host, traffic_token, vnc_password, secret, local_origin, *
             # Return Response(upstream.content, headers=response_headers).
             return Response(upstream.content, headers=response_headers)
         # Handle httpx.HTTPError; unmatched errors propagate.
-        except httpx.HTTPError:
+        except httpx.HTTPError as error:
             # Check whether on_error.
-            if on_error:
-                # Call on_error with 'UPSTREAM_ASSET_CONNECTION_ERROR'.
-                on_error("UPSTREAM_ASSET_CONNECTION_ERROR")
+            if on_error and essential:
+                # Fixed categories only; raw exceptions may include credentials.
+                category = "CONNECTION_ERROR"
+                for error_type, name in ((httpx.ConnectTimeout, "CONNECT_TIMEOUT"),
+                                         (httpx.ReadTimeout, "READ_TIMEOUT"),
+                                         (httpx.PoolTimeout, "POOL_TIMEOUT"),
+                                         (httpx.ProxyError, "PROXY_ERROR"),
+                                         (httpx.ConnectError, "CONNECT_ERROR"),
+                                         (httpx.RemoteProtocolError, "PROTOCOL_ERROR")):
+                    if isinstance(error, error_type):
+                        category = name
+                        break
+                on_error("UPSTREAM_ASSET_" + category)
             # Return Response('Cannot reach desktop viewer.', status_code=502,
             # headers=private_headers).
             return Response("Cannot reach desktop viewer.", status_code=502, headers=private_headers)

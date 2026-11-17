@@ -65,8 +65,24 @@ class Decision:
     reason: str
 
 
+@dataclass(frozen=True)
+class ScreenArea:
+    """A rectangle in real desktop pixels. left/top are inside; right/bottom are not."""
+    left: int
+    top: int
+    right: int
+    bottom: int
+
+    def contains(self, x: int, y: int) -> bool:
+        return self.left <= x < self.right and self.top <= y < self.bottom
+
+
+# Largest coordinate accepted at all, matching the largest screenshot we accept.
+MAX_COORDINATE = 8192
+
+
 # Define authorize with parameters grant, call.
-def authorize(grant: TaskGrant, call: ToolCall) -> Decision:
+def authorize(grant: TaskGrant, call: ToolCall, *, click_area: ScreenArea | None = None) -> Decision:
     """Return Decision(True, ...) only when the call is permitted.
 
     Rules, checked in this order (packages/security/tests encodes them):
@@ -85,7 +101,14 @@ def authorize(grant: TaskGrant, call: ToolCall) -> Decision:
     3. For "search_page": require exactly one query string, nonblank, containing
        a word/number, and no longer than 200 characters. It searches the current
        page; it cannot supply a URL or widen navigation authority.
-    4. Anything that passes is allowed.
+    4. For "click": args are exactly integer "x" and "y" in real screen pixels.
+       The caller must pass `click_area`, the browser page rectangle; the point must
+       be inside it. No area means the page position is unknown, so deny. This keeps
+       clicks off the address bar, tabs, taskbar, and dock. What the click *hits*
+       inside the page is checked separately by the desktop adapter.
+    5. For "read_visible_links": no arguments. This permits reading visible link
+       labels and geometry; it does not capture an image or permit a click.
+    6. Anything that passes is allowed.
 
     Every denial needs a short human-readable reason. The agent sees it in its
     transcript, so it must not reveal secrets, but should explain enough to replan.
@@ -95,6 +118,9 @@ def authorize(grant: TaskGrant, call: ToolCall) -> Decision:
     if call.name not in grant.allowed_tools:
         # Return Decision(False, f"Tool '{call.name}' is not permitted for this task.").
         return Decision(False, f"Tool '{call.name}' is not permitted for this task.")
+
+    if call.name == "read_visible_links" and call.args:
+        return Decision(False, "read_visible_links takes no arguments.")
 
     # Check whether call.name equals 'search_page'.
     if call.name == "search_page":
@@ -125,6 +151,16 @@ def authorize(grant: TaskGrant, call: ToolCall) -> Decision:
             # to 5.').
             return Decision(False, "scroll requires direction up/down and an integer amount from 1 to 5.")
 
+    if call.name == "click":
+        x, y = call.args.get("x"), call.args.get("y")
+        # type(...) is int rejects True/False, which Python otherwise treats as 1/0.
+        if (set(call.args) != {"x", "y"} or type(x) is not int or type(y) is not int
+                or not 0 <= x <= MAX_COORDINATE or not 0 <= y <= MAX_COORDINATE):
+            return Decision(False, "click requires integer x and y screen coordinates.")
+        if click_area is None:
+            return Decision(False, "The browser page position is unknown, so clicks are not permitted.")
+        if not click_area.contains(x, y):
+            return Decision(False, f"Click at ({x}, {y}) is outside the browser page area.")
     # Check whether call.name equals 'navigate'.
     if call.name == "navigate":
         # 2a. Model output is untrusted: never assume the argument exists or is a str.

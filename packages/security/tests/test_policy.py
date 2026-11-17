@@ -18,6 +18,22 @@ GRANT = TaskGrant(
 )
 
 
+@pytest.mark.parametrize("tools, allowed", [
+    ({"screenshot"}, False),
+    ({"click"}, False),
+    ({"read_visible_links"}, True),
+])
+def test_read_visible_links_requires_explicit_permission(tools, allowed):
+    grant = TaskGrant("links", frozenset(tools), frozenset())
+    assert authorize(grant, ToolCall("read_visible_links")).allowed is allowed
+
+
+def test_read_visible_links_refuses_arguments():
+    grant = TaskGrant("links", frozenset({"read_visible_links"}), frozenset())
+    decision = authorize(grant, ToolCall("read_visible_links", {"url": "https://example.com"}))
+    assert not decision.allowed and "no arguments" in decision.reason
+
+
 # Define navigate with parameters url.
 def navigate(url):
     # Return ToolCall('navigate', {'url': url}).
@@ -92,3 +108,49 @@ def test_everything_else_is_denied_with_a_reason(call):
     assert not decision.allowed
     # Assert that decision.reason. If false, this check fails with AssertionError.
     assert decision.reason
+
+
+# --- click (W1X-F01) ---------------------------------------------------------------
+
+from crescendo_security.policy import ScreenArea
+
+CLICK_GRANT = TaskGrant("task-click", frozenset({"click"}), frozenset())
+AREA = ScreenArea(left=0, top=114, right=1024, bottom=700)
+
+
+def click(x, y):
+    return ToolCall("click", {"x": x, "y": y})
+
+
+@pytest.mark.parametrize("call", [click(0, 114), click(512, 400), click(1023, 699)])
+def test_click_inside_page_area_is_allowed(call):
+    assert authorize(CLICK_GRANT, call, click_area=AREA).allowed
+
+
+@pytest.mark.parametrize("call, reason", [
+    (click(512, 90), "outside"),       # Chrome address bar
+    (click(512, 20), "outside"),       # desktop taskbar
+    (click(512, 740), "outside"),      # dock at the bottom edge
+    (click(1024, 400), "outside"),     # right/bottom edges are exclusive
+    (click(512, 700), "outside"),
+    (click(True, 400), "integer"),     # bool is not a coordinate
+    (click(512.0, 400), "integer"),
+    (click("512", 400), "integer"),
+    (click(-1, 400), "integer"),
+    (click(9000, 400), "integer"),
+    (ToolCall("click", {"x": 512}), "integer"),
+    (ToolCall("click", {"x": 512, "y": 400, "button": "right"}), "integer"),
+])
+def test_click_outside_area_or_malformed_is_denied(call, reason):
+    decision = authorize(CLICK_GRANT, call, click_area=AREA)
+    assert not decision.allowed
+    assert reason in decision.reason
+
+
+def test_click_without_known_page_area_is_denied():
+    decision = authorize(CLICK_GRANT, click(512, 400))
+    assert not decision.allowed and "unknown" in decision.reason
+
+
+def test_click_requires_grant_even_inside_area():
+    assert not authorize(GRANT, click(512, 400), click_area=AREA).allowed

@@ -42,6 +42,11 @@ class Observation:
     links: tuple[PageLink, ...] = ()
 
 
+class ActionDenied(ValueError):
+    """The desktop refused an action after checking the live page. The message is a
+    short, safe reason the agent may see so it can choose something else."""
+
+
 # Define Desktop as a subclass of Protocol.
 class Desktop(Protocol):
     # Define observe with parameters self.

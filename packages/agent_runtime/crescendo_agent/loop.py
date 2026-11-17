@@ -31,8 +31,8 @@ from .model import TOOLS, Entry, Model
 @dataclass
 # Define RunResult.
 class RunResult:
-    # Declare status with type Literal['finished', 'step_limit', 'deadline', 'rate_limited'].
-    status: Literal["finished", "step_limit", "deadline", "rate_limited"]
+    # Terminal status distinguishes provider failure from a completed answer.
+    status: Literal["finished", "step_limit", "deadline", "rate_limited", "model_timeout", "model_unavailable"]
     # Declare answer with type str | None.
     answer: str | None
     # Declare sources with type list[str].

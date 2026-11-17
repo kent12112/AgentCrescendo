@@ -13,7 +13,7 @@ from urllib.parse import urldefrag, urljoin, urlsplit
 # Import from crescendo_security.policy: TaskGrant (holds the task identity and immutable tool/host
 # allowlists); ToolCall (holds an untrusted proposed tool name and argument mapping); authorize
 # (checks task grants and argument bounds before a proposed tool can execute).
-from crescendo_security.policy import TaskGrant, ToolCall, authorize
+from crescendo_security.policy import ScreenArea, TaskGrant, ToolCall, authorize
 
 # Import from .browser_bootstrap: RELAY (the fixed remote CDP TCP relay program); START_BROWSER (the
 # fixed remote Chrome launch/readiness program); WAIT_READY (the fixed remote relay-readiness
@@ -21,7 +21,7 @@ from crescendo_security.policy import TaskGrant, ToolCall, authorize
 from .browser_bootstrap import RELAY, START_BROWSER, WAIT_READY
 # Import from .desktop: Observation (holds current page URL, bounded text, and observed links);
 # PageLink (holds one observed label and destination).
-from .desktop import Observation, PageLink
+from .desktop import ActionDenied, Observation, PageLink
 # Import from .page_search: search_passages (finds a bounded selection of lexical matches in
 # current-page text).
 from .page_search import search_passages
@@ -125,6 +125,60 @@ WIKIPEDIA_CONTENT = """root => {
 # Set SCROLL_POINTER to (512, 440).
 SCROLL_POINTER = (512, 440)
 
+# Where clicks may land, in real screen pixels. Measured live on November 16, 2026
+# (probes in docs/e2b-clicking.md): page content starts at screen y=114 under Chrome's
+# tabs and address bar. Below y~715 a desktop dock pops up when the pointer nears the
+# bottom edge; clicking it could launch a terminal, so the area stops at y=700.
+# Chrome's window is wider than the 1024-pixel screen, so the right edge is the screen's.
+PAGE_AREA = ScreenArea(left=0, top=114, right=1024, bottom=700)
+# The window and viewport sizes PAGE_AREA was measured with. If Chrome is anywhere
+# else, the page could be shifted, so clicks are refused rather than misplaced.
+EXPECTED_WINDOW = {"left": -4, "top": 27, "width": 1282, "height": 800, "windowState": "normal"}
+EXPECTED_VIEWPORT = [1280, 720]
+# How long to watch for a click to start a page load before deciding it did not.
+CLICK_SETTLE_MS = 2000
+# Reports what a click at a viewport point would hit. Runs as automation code, so it
+# works with page scripts disabled; it only reads the page.
+CLICK_TARGET = """([x, y]) => {
+    const hit = document.elementFromPoint(x, y);
+    if (!hit) return {kind: "none"};
+    if (hit.closest("iframe, frame, embed, object")) return {kind: "frame"};
+    if (hit.closest("img[usemap]")) return {kind: "imagemap"};
+    const base = document.querySelector("base[target]");
+    const baseTarget = base ? base.getAttribute("target") : "";
+    const link = hit.closest("a[href], area[href]");
+    if (link) return {kind: "link", target: link.getAttribute("target") ?? baseTarget,
+                      download: link.hasAttribute("download")};
+    const label = hit.closest("label");
+    const control = hit.closest("button, input") || (label && label.control);
+    const form = control && control.form;
+    if (form) return {kind: "form", target: control.getAttribute("formtarget")
+                      ?? form.getAttribute("target") ?? baseTarget};
+    return {kind: "other"};
+}"""
+# Targets that keep the page in this tab. Our request filter watches only this tab.
+SAME_TAB_TARGETS = frozenset({"", "_self", "_top", "_parent"})
+
+
+def click_target_problem(target) -> str | None:
+    """Why a click on this target is refused, or None if it may proceed."""
+    kind = target.get("kind") if isinstance(target, dict) else None
+    if kind in ("none", "other"):
+        return None
+    if kind == "frame":
+        return "Clicks inside embedded frames are not permitted."
+    if kind == "imagemap":
+        return "Clicks on image maps are not permitted."
+    if kind in ("link", "form"):
+        where = target.get("target")
+        if not isinstance(where, str) or where.strip().lower() not in SAME_TAB_TARGETS:
+            return "That link or form would open a new tab or window, which is not permitted."
+        if target.get("download"):
+            return "Download links are not permitted."
+        return None
+    # Anything unexpected fails closed.
+    return "The click target could not be checked."
+
 # Chrome resource types the request filter may continue (permitted hosts, GET only).
 # Set ALLOWED_RESOURCE_TYPES to an immutable set of {'Document', 'Stylesheet'}.
 ALLOWED_RESOURCE_TYPES = frozenset({"Document", "Stylesheet"})
@@ -134,7 +188,7 @@ ALLOWED_RESOURCE_TYPES = frozenset({"Document", "Stylesheet"})
 class E2BDesktop:
     # Define __init__ with parameters self, page, session, grant, max_chars, screenshot_provider,
     # scroll_provider, pointer_provider, viewer_provider.
-    def __init__(self, page: Any, session: Any, grant: TaskGrant, *, max_chars=4000, screenshot_provider=None, scroll_provider=None, pointer_provider=None, viewer_provider=None):
+    def __init__(self, page: Any, session: Any, grant: TaskGrant, *, max_chars=4000, screenshot_provider=None, scroll_provider=None, pointer_provider=None, viewer_provider=None, click_provider=None):
         # Set self.page to page.
         self.page = page
         # Set self.session to session.
@@ -151,8 +205,26 @@ class E2BDesktop:
         self._pointer_provider = pointer_provider
         # Set self._viewer_provider to viewer_provider.
         self._viewer_provider = viewer_provider
+        # The real desktop's left-click (E2B left_click), used only after all click checks.
+        self._click_provider = click_provider
+        self._link_snapshot = None
+        self._visible_link_ids = set()
+        self._next_link_id = 1
+        # Frame IDs of every page-document request the filter has seen, in order. A click
+        # uses this to tell whether it started a page load.
+        self._document_frames_seen: list[str] = []
+        # URLs of tabs that opened despite the click checks; each is closed at once.
+        self.closed_pages: list[str] = []
+        # How many times this tab has started showing a new document (including error
+        # pages). A click waits for this to change; comparing URLs fails when the old
+        # and new page share one, e.g. two error pages in a row.
+        self._main_navigations = 0
+        page.on("framenavigated", self._frame_navigated)
         # Set self.visited to an empty list.
         self.visited: list[str] = []
+        # Only public navigation status and retry delay; never retain full headers.
+        self.last_navigation_status: int | None = None
+        self.last_navigation_retry_after: str | None = None
         # Set self.blocked_requests to an empty list.
         self.blocked_requests: list[str] = []
         # Set self._blocked_document_frames to set().
@@ -163,6 +235,11 @@ class E2BDesktop:
         session.on("Fetch.requestPaused", self._request_paused)
         # Call session.send with 'Fetch.enable', {'patterns': [{'urlPattern': '*', 'requestStage':
         # 'Request'}]}.
+        # Backstop: our request filter watches only this tab. If a click still opens a
+        # new tab, close it immediately and record it. Its first request has already
+        # gone out, limited only by the E2B firewall, so this is not a substitute for
+        # refusing new-tab clicks before they happen.
+        page.context.on("page", self._new_page)
         session.send("Fetch.enable", {"patterns": [
             # Add this item to the surrounding list: {"urlPattern": "*", "requestStage":
             # "Request"},.
@@ -225,6 +302,147 @@ class E2BDesktop:
         # Call self._scroll_provider with no arguments.
         self._scroll_provider(direction=direction, amount=amount)
 
+    def click_area(self) -> ScreenArea | None:
+        """PAGE_AREA if Chrome's window and viewport match what it was measured with."""
+        try:
+            bounds = self.session.send("Browser.getWindowForTarget")["bounds"]
+            # innerWidth/innerHeight include scrollbars, so they do not change per page.
+            viewport = self.page.evaluate("() => [innerWidth, innerHeight]")
+        except Exception:
+            # Unknown position: fail closed. The gateway then denies the click.
+            return None
+        window = {key: bounds.get(key) for key in EXPECTED_WINDOW}
+        if window != EXPECTED_WINDOW or viewport != EXPECTED_VIEWPORT:
+            return None
+        return PAGE_AREA
+
+    def visible_links(self) -> list[dict]:
+        """Snapshot at most 120 hittable links inside the measured safe page area.
+
+        Requires read_visible_links and click permission. This optional DOM
+        assistance reads visible labels and geometry without capturing an image.
+        The resolved click passes the normal gateway and adapter.
+        IDs are never reused within this desktop, so old observations fail closed.
+        """
+        from .link_grounding import LINK_LABELS, MAX_VISIBLE_LINKS, READ_LINK_TARGETS
+
+        previous, self._link_snapshot = self._link_snapshot, None
+        self._visible_link_ids.clear()
+        if previous is not None:
+            try:
+                previous.dispose()
+            except Exception:
+                pass  # A navigation may already have destroyed the old context.
+        if "click" not in self.grant.allowed_tools:
+            raise ActionDenied("Click is not permitted for this task.")
+        decision = authorize(self.grant, ToolCall("read_visible_links"))
+        if not decision.allowed:
+            raise ActionDenied(decision.reason)
+        area = self.click_area()
+        if area is None:
+            return []
+        try:
+            self._link_snapshot = self.page.evaluate_handle(READ_LINK_TARGETS, {
+                "page": {"left": area.left, "top": area.top,
+                         "right": area.right, "bottom": area.bottom},
+                "firstId": self._next_link_id, "limit": MAX_VISIBLE_LINKS})
+            labels = self._link_snapshot.evaluate(LINK_LABELS)
+        except Exception:
+            return []  # No selectable IDs when the live page cannot be inspected.
+        self._visible_link_ids = {target["id"] for target in labels}
+        self._next_link_id += len(labels)
+        return labels
+
+    def resolve_link(self, target_id: int) -> tuple[int, int]:
+        """Resolve a current ID to a checked screen point, without pressing anything."""
+        from .link_grounding import RESOLVE_LINK_TARGET
+
+        if type(target_id) is not int or target_id not in self._visible_link_ids:
+            raise ActionDenied("Choose a link ID from the current visible_links observation.")
+        try:
+            point = self._link_snapshot.evaluate(RESOLVE_LINK_TARGET, target_id)
+        except Exception:
+            point = None
+        if point is None:
+            raise ActionDenied("The selected link changed. Inspect the next screenshot and choose again.")
+        return point["x"], point["y"]
+
+    def click(self, x: int, y: int) -> str:
+        """Left-click once at real screen pixel (x, y) and report what happened.
+
+        Order: gateway (page area) -> what is under the point -> real pointer click
+        -> wait for any page load, while the request filter checks every request.
+        Raises ActionDenied with a safe reason when a check refuses the click.
+        """
+        from playwright.sync_api import TimeoutError as PlaywrightTimeout
+
+        area = self.click_area()
+        decision = authorize(self.grant, ToolCall("click", {"x": x, "y": y}), click_area=area)
+        if not decision.allowed:
+            raise ActionDenied(decision.reason)
+        if self._click_provider is None or self._pointer_provider is None:
+            raise RuntimeError("Desktop click and pointer providers are not configured.")
+        self.page.bring_to_front()
+        # Ask the page what this point would hit, in page (viewport) coordinates.
+        target = self.page.evaluate(CLICK_TARGET, [x - area.left, y - area.top])
+        problem = click_target_problem(target)
+        if problem is not None:
+            raise ActionDenied(problem)
+        main_frame = self.session.send("Page.getFrameTree")["frameTree"]["frame"]["id"]
+        navigations_before = self._main_navigations
+        seen_before = len(self._document_frames_seen)
+        self._blocked_document_frames.clear()
+        # Move the REAL pointer, then press the REAL left button (see SCROLL_POINTER).
+        self._pointer_provider(x, y)
+        self._click_provider()
+        # Playwright runs our request-filter callback only while it is inside one of its
+        # own calls, so wait with page.wait_for_timeout, never time.sleep: a sleeping
+        # process leaves the page's requests paused forever (live probe, Nov 16, 2026).
+        started = False
+        for _ in range(CLICK_SETTLE_MS // 250):
+            self.page.wait_for_timeout(250)
+            if main_frame in self._document_frames_seen[seen_before:]:
+                started = True
+                break
+        if not started:
+            return "The click did not start a page load. Inspect the next screenshot for its effect."
+        # Wait for the tab to switch to the new document (or Chrome's error page), then
+        # for that document to load. A request blocked by our filter needs no wait.
+        if main_frame not in self._blocked_document_frames:
+            for _ in range(80):  # 80 x 250 ms = 20 s
+                if self._main_navigations > navigations_before:
+                    break
+                self.page.wait_for_timeout(250)
+            else:
+                return "The click started a page load that did not finish within 20 seconds."
+        try:
+            self.page.wait_for_load_state("load", timeout=20000)
+        except PlaywrightTimeout:
+            return "The click started a page load that did not finish within 20 seconds."
+        if main_frame in self._blocked_document_frames:
+            self._navigation_failure = Observation(
+                None,
+                "Navigation blocked by browser policy. No page content was read. "
+                "Choose another permitted source or finish with available information.",
+            )
+            return "The page this click requested was blocked by browser policy. No page content was read."
+        self._navigation_failure = None
+        self.visited.append(self.page.url)
+        return f"The click opened {self.page.url}."
+
+    def _frame_navigated(self, frame) -> None:
+        if frame == self.page.main_frame:
+            self._main_navigations += 1
+
+    def _new_page(self, page) -> None:
+        from playwright.sync_api import Error as PlaywrightError
+
+        self.closed_pages.append(page.url)
+        try:
+            page.close()
+        except PlaywrightError:
+            pass  # Already closed; nothing left to stop.
+
     # Define live_view with parameters self.
     def live_view(self):
         # Set decision to authorize(self.grant, ToolCall('view_desktop')).
@@ -246,6 +464,8 @@ class E2BDesktop:
         request = event["request"]
         # Set url to request['url'].
         url = request["url"]
+        if event["resourceType"] == "Document":
+            self._document_frames_seen.append(event.get("frameId"))
         # Try the following operations; matching except clauses handle failures.
         try:
             # Set allowed to authorize(self.grant, ToolCall('navigate', {'url': url})).allowed.
@@ -393,12 +613,20 @@ class E2BDesktop:
             raise ValueError(decision.reason)
         # Call self._blocked_document_frames.clear with no arguments.
         self._blocked_document_frames.clear()
+        self.last_navigation_status = None
+        self.last_navigation_retry_after = None
         # Try the following operations; matching except clauses handle failures.
         try:
             # "load" waits until stylesheets have been applied or blocked, so the
             # next screenshot shows the drawn page rather than a blank tab.
             # Call self.page.goto with url.
-            self.page.goto(url, wait_until="load", timeout=20000)
+            response = self.page.goto(url, wait_until="load", timeout=20000)
+            if response is not None:
+                self.last_navigation_status = response.status if type(response.status) is int else None
+                headers = response.headers
+                if isinstance(headers, dict):
+                    retry_after = headers.get("retry-after")
+                    self.last_navigation_retry_after = retry_after if isinstance(retry_after, str) else None
         # Handle PlaywrightError as error; unmatched errors propagate.
         except PlaywrightError as error:
             # Only a blocked main-frame document explains a recoverable policy
@@ -533,6 +761,8 @@ def open_e2b_desktop(grant: TaskGrant, *, sandbox_type=None, playwright_factory=
                                      scroll_provider=sandbox.scroll,
                                      # Supply the sandbox’s mouse-movement method without calling it yet.
                                      pointer_provider=sandbox.move_mouse,
+                                     # Supply the sandbox's left-click method without calling it yet.
+                                     click_provider=sandbox.left_click,
                                      # Supply a callback that opens a live viewer when called.
                                      viewer_provider=lambda: _open_live_view(sandbox))
                 # Give desktop to the caller and pause here until execution resumes.
