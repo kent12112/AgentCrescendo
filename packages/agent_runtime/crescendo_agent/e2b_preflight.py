@@ -16,12 +16,96 @@ from typing import Any
 # The comments inside the string run (and are ignored) inside the remote desktop.
 PROBE = r'''
 import errno
+import http.client
 import json
+import os
 import socket
+import ssl
 import urllib.error
+import urllib.parse
 import urllib.request
 
 results = {}
+ALLOWED = "en.wikipedia.org"
+
+
+def error_name(exc):
+    """A short, stable name for why a connection failed (never a message with data)."""
+    # TLS errors carry OpenSSL's own codes in errno (8 = "EOF in handshake"), which
+    # are not OS error numbers; looking them up would mislabel them (8 -> ENOEXEC).
+    if isinstance(exc, ssl.SSLError):
+        return type(exc).__name__
+    code = getattr(exc, "errno", None)
+    return errno.errorcode.get(code, type(exc).__name__) if code else type(exc).__name__
+
+
+def tls_as_allowed_name(ip, port=443):
+    """Connect to `ip` but present the ALLOWED name in TLS (SNI), certificate checked.
+
+    The firewall matches names, not IPs. This asks: when the name is allowed but
+    the IP is something else, which server do we actually reach?
+      allowed_server  the certificate is valid for ALLOWED: the firewall looked
+                      the name up itself, so the guest's chosen IP did not matter.
+      other_server    a server answered with a certificate NOT valid for ALLOWED:
+                      the firewall forwarded us to the IP we picked. Failure.
+      blocked         no TLS answer at all (refused, reset, timeout, closed).
+      tls_alert       some other TLS error; ambiguous, so the judge fails it.
+    """
+    context = ssl.create_default_context()
+    try:
+        with socket.create_connection((ip, port), timeout=8) as raw:
+            with context.wrap_socket(raw, server_hostname=ALLOWED):
+                return {"outcome": "allowed_server"}
+    except ssl.SSLCertVerificationError:
+        return {"outcome": "other_server", "error": "SSLCertVerificationError"}
+    except (ssl.SSLEOFError, ssl.SSLZeroReturnError) as exc:
+        return {"outcome": "blocked", "error": type(exc).__name__}
+    except ssl.SSLError as exc:
+        return {"outcome": "tls_alert", "error": exc.reason or type(exc).__name__}
+    except OSError as exc:
+        return {"outcome": "blocked", "error": error_name(exc)}
+
+
+def http_as_allowed_name(ip):
+    """Plain HTTP to `ip` on port 80 with `Host: ALLOWED`. Same outcomes as above.
+
+    Wikipedia answers plain HTTP with a redirect whose Location names ALLOWED;
+    any other answer came from a different server.
+    """
+    try:
+        with socket.create_connection((ip, 80), timeout=8) as sock:
+            sock.sendall(b"GET /wiki/Boston HTTP/1.1\r\nHost: " + ALLOWED.encode()
+                         + b"\r\nConnection: close\r\n\r\n")
+            reply = sock.recv(4096)
+    except OSError as exc:
+        return {"outcome": "blocked", "error": error_name(exc)}
+    if not reply:
+        return {"outcome": "blocked", "error": "EMPTY_REPLY"}
+    head = reply.split(b"\r\n\r\n", 1)[0].lower()
+    status = head.split(b"\r\n", 1)[0].decode("ascii", "replace")[:40]
+    if b"location: https://" + ALLOWED.encode() in head:
+        return {"outcome": "allowed_server", "status_line": status}
+    return {"outcome": "other_server", "status_line": status}
+
+
+def dns_udp(server):
+    """Send one DNS question (example.com, type A) straight to `server` over UDP.
+
+    reachable=True means a matching reply came back, i.e. UDP port 53 traffic to
+    that server leaves the sandbox. A lookup is itself outbound data: whatever
+    name is asked is sent to that resolver.
+    """
+    query_id = os.urandom(2)
+    question = b"".join(bytes([len(part)]) + part for part in (b"example", b"com")) + b"\x00"
+    packet = query_id + b"\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00" + question + b"\x00\x01\x00\x01"
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.settimeout(5)
+        try:
+            sock.sendto(packet, (server, 53))
+            reply, _ = sock.recvfrom(512)
+        except OSError as exc:
+            return {"reachable": False, "error": error_name(exc)}
+    return {"reachable": reply[:2] == query_id}
 
 
 def tcp_probe(host, port):
@@ -50,8 +134,10 @@ for name, url in [
     except urllib.error.HTTPError as exc:
         # Even a 403 proves that an HTTP server was reachable.
         results[name] = {"reachable": True, "http_status": exc.code}
-    except (OSError, urllib.error.URLError):
-        results[name] = {"reachable": False}
+    except (OSError, urllib.error.URLError) as exc:
+        reason = getattr(exc, "reason", exc)
+        results[name] = {"reachable": False,
+                         "error": error_name(reason) if isinstance(reason, BaseException) else "URLError"}
 
 # TCP only: do not request or read metadata, credentials, or backend content.
 # E2B's sandbox-local MMDS uses the metadata IP outside filtered egress.
@@ -76,15 +162,99 @@ except socket.gaierror:
 else:
     results["wikipedia_ipv6_tcp"] = tcp_probe(infos[0][4][0], 443)
 
+# --- DNS -------------------------------------------------------------------
+# E2B lets DNS out to its default resolver (8.8.8.8) whenever allow_out names a
+# domain, and its SDK says "all traffic to it is allowed". Measure that, and
+# check that another resolver is NOT reachable.
+try:
+    unlisted_ip = socket.gethostbyname("example.com")
+    results["dns_lookup_unlisted"] = {"resolved": True}
+except OSError as exc:
+    unlisted_ip = None
+    results["dns_lookup_unlisted"] = {"resolved": False, "error": error_name(exc)}
+results["dns_udp_default_resolver"] = dns_udp("8.8.8.8")
+results["dns_udp_other_resolver"] = dns_udp("1.1.1.1")
+results["default_resolver_tcp443"] = tcp_probe("8.8.8.8", 443)
+
+# --- Name matching vs. the IP actually reached ----------------------------
+# This is also the DNS-rebinding case: if a lookup ever handed the browser a
+# hostile IP for an allowed name, the connection would look exactly like these.
+if unlisted_ip is None:
+    results["sni_to_unlisted_ip"] = {"outcome": "not_run", "error": "NO_ADDRESS"}
+    results["host_header_to_unlisted_ip"] = {"outcome": "not_run", "error": "NO_ADDRESS"}
+else:
+    results["sni_to_unlisted_ip"] = tls_as_allowed_name(unlisted_ip)
+    results["host_header_to_unlisted_ip"] = http_as_allowed_name(unlisted_ip)
+results["sni_to_private_ip"] = tls_as_allowed_name("10.0.0.1")
+
+# --- Shared IPs ------------------------------------------------------------
+# en.wiktionary.org is served from the same Wikimedia addresses as Wikipedia.
+# Presenting its (unlisted) name must be blocked even though the IP is shared.
+try:
+    with socket.create_connection(("en.wiktionary.org", 443), timeout=8) as raw:
+        with ssl.create_default_context().wrap_socket(raw, server_hostname="en.wiktionary.org"):
+            results["shared_ip_unlisted_name"] = {"reachable": True}
+except OSError as exc:  # ssl.SSLError is a subclass of OSError
+    results["shared_ip_unlisted_name"] = {"reachable": False, "error": error_name(exc)}
+
+# Domain fronting: TLS names the allowed host (what the firewall sees), but the
+# encrypted HTTP request asks for a different site on the same servers. The
+# firewall cannot read inside TLS, so we expect this to work: a limit to record.
+try:
+    connection = http.client.HTTPSConnection(ALLOWED, timeout=10)
+    connection.request("GET", "/wiki/Boston", headers={
+        "Host": "en.wiktionary.org", "User-Agent": "CrescendoNetworkPreflight/0.1"})
+    response = connection.getresponse()
+    body = response.read(300000).lower()
+    connection.close()
+    results["domain_fronting"] = {"reachable": True, "http_status": response.status,
+                                  "served_other_site": b"wiktionary" in body
+                                  and b"wikipedia, the free encyclopedia" not in body}
+except OSError as exc:
+    results["domain_fronting"] = {"reachable": False, "error": error_name(exc)}
+
+# --- Redirect to another host ---------------------------------------------
+# A redirect is just a new connection to a new name; the firewall must judge
+# that new connection on its own. Read the redirect without following it, then
+# try the destination ourselves.
+try:
+    connection = http.client.HTTPSConnection(ALLOWED, timeout=10)
+    connection.request("GET", "/wiki/wikt:Boston", headers={"User-Agent": "CrescendoNetworkPreflight/0.1"})
+    response = connection.getresponse()
+    location = response.getheader("Location")
+    connection.close()
+    target = urllib.parse.urlsplit(urllib.parse.urljoin("https://" + ALLOWED + "/", location or ""))
+    redirect = {"http_status": response.status,
+                "location_host": target.hostname if location else None}
+    if location and target.hostname != ALLOWED:
+        try:
+            with socket.create_connection((target.hostname, 443), timeout=8) as raw:
+                with ssl.create_default_context().wrap_socket(raw, server_hostname=target.hostname):
+                    redirect["reachable"] = True
+        except OSError as exc:
+            redirect.update(reachable=False, error=error_name(exc))
+    results["offhost_redirect"] = redirect
+except OSError as exc:
+    results["offhost_redirect"] = {"http_status": None, "location_host": None, "error": error_name(exc)}
+
 print(json.dumps(results))
 '''
 
 # Probes that must connect: without them, permitted browsing is not shown to work.
 MUST_REACH = ("allowed_wikipedia",)
 # Probes that must not connect: any one connecting means browsing stays disabled.
-MUST_BLOCK = ("unlisted_example", "private_tcp", "public_ipv6_tcp", "private_ipv6_tcp")
+MUST_BLOCK = ("unlisted_example", "private_tcp", "public_ipv6_tcp", "private_ipv6_tcp",
+              "dns_udp_other_resolver", "shared_ip_unlisted_name")
 # Probes recorded for interpretation only; their reachability passes either way.
-INFORMATIONAL = ("metadata_tcp", "wikipedia_ipv6_tcp")
+INFORMATIONAL = ("metadata_tcp", "wikipedia_ipv6_tcp", "dns_udp_default_resolver",
+                 "default_resolver_tcp443", "domain_fronting")
+# Probes that present the allowed name to some other IP. They report an `outcome`
+# instead of `reachable`. Passing outcomes: the firewall blocked the connection,
+# or it routed by name to the real allowed server. Anything else fails.
+NAME_BOUND = ("sni_to_unlisted_ip", "host_header_to_unlisted_ip", "sni_to_private_ip")
+NAME_BOUND_PASSING = ("blocked", "allowed_server")
+# The host the preflight sandbox allows; a redirect to any other host must not connect.
+PREFLIGHT_ALLOWED_HOST = "en.wikipedia.org"
 
 
 # Decorate the class with generated data-container methods; frozen=True prevents attribute
@@ -161,8 +331,67 @@ def evaluate_preflight(results: Mapping) -> Verdict:
         error = results["wikipedia_ipv6_tcp"].get("error", "unknown")
         # Append a note: IPv6 to the allowed host did not connect, and why.
         notes.append(f"wikipedia_ipv6_tcp not reachable ({error}): browsing relies on IPv4.")
+    _judge_dns_and_fronting(results, failures, notes)
+    _judge_name_bound(results, failures, notes)
+    _judge_redirect(results, failures, notes)
     # Return a Verdict that passes only when no failure was recorded.
     return Verdict(passed=not failures, failures=tuple(failures), notes=tuple(notes))
+
+
+def _judge_dns_and_fronting(results: Mapping, failures: list, notes: list) -> None:
+    """Record the documented DNS exception and the domain-fronting limit as notes."""
+    lookup = results.get("dns_lookup_unlisted")
+    if not (isinstance(lookup, Mapping) and type(lookup.get("resolved")) is bool):
+        failures.append("dns_lookup_unlisted: missing or malformed result; the evidence is incomplete.")
+    elif lookup["resolved"]:
+        notes.append("dns_lookup_unlisted resolved: names outside the allowlist can still be looked up, "
+                     "so every looked-up name is sent to the resolver (a small outbound data channel).")
+    if _reachable(results, "dns_udp_default_resolver") is True:
+        notes.append("dns_udp_default_resolver accepted: UDP DNS to 8.8.8.8 leaves the sandbox "
+                     "(E2B's documented DNS exception).")
+    if _reachable(results, "default_resolver_tcp443") is True:
+        notes.append("default_resolver_tcp443 accepted: the default resolver 8.8.8.8 is reachable on a "
+                     "non-DNS port, a second outbound path besides the allowlist. E2B's dns_servers "
+                     "option can narrow it.")
+    fronting = results.get("domain_fronting")
+    if isinstance(fronting, Mapping) and fronting.get("served_other_site") is True:
+        notes.append("domain_fronting served another site: the firewall sees only the TLS name, so a site "
+                     "sharing the allowed host's servers is reachable at the network layer. Only the "
+                     "browser request filter checks the real destination.")
+
+
+def _judge_name_bound(results: Mapping, failures: list, notes: list) -> None:
+    """Fail when presenting the allowed name to another IP reached a different server."""
+    for name in NAME_BOUND:
+        entry = results.get(name)
+        outcome = entry.get("outcome") if isinstance(entry, Mapping) else None
+        if outcome == "other_server":
+            failures.append(f"{name}: the allowed name reached a different server; the allowlist "
+                            "does not constrain the destination IP. Do not enable browsing.")
+        elif outcome not in NAME_BOUND_PASSING:
+            failures.append(f"{name}: outcome {outcome!r} is missing or ambiguous; the evidence is incomplete.")
+        elif outcome == "allowed_server":
+            notes.append(f"{name}: routed to the real allowed server; the firewall chose the IP by name, "
+                         "not the IP the guest asked for.")
+
+
+def _judge_redirect(results: Mapping, failures: list, notes: list) -> None:
+    """A redirect to an unlisted host must not connect; no off-host redirect is only a note."""
+    entry = results.get("offhost_redirect")
+    if not isinstance(entry, Mapping) or "location_host" not in entry:
+        failures.append("offhost_redirect: missing or malformed result; the evidence is incomplete.")
+        return
+    host = entry["location_host"]
+    if host is None or host == PREFLIGHT_ALLOWED_HOST:
+        notes.append("offhost_redirect not exercised: the page did not redirect to another host.")
+        return
+    reachable = entry.get("reachable")
+    if type(reachable) is not bool:
+        failures.append("offhost_redirect: missing or malformed result; the evidence is incomplete.")
+    elif reachable:
+        failures.append(f"offhost_redirect: redirect destination {host} was reachable; do not enable browsing.")
+    else:
+        notes.append(f"offhost_redirect: redirect to {host} was not reachable ({entry.get('error', 'unknown')}).")
 
 
 # Define run_preflight with parameters sandbox_type.
@@ -170,8 +399,8 @@ def run_preflight(*, sandbox_type: Any = None) -> dict:
     """Create a restricted desktop, probe networking, always attempt cleanup.
 
     A failed connection is evidence of non-reachability, not proof that a firewall
-    caused it. Redirects, DNS rebinding, browser subrequests, and authenticated
-    live view still need separate verification before claiming complete isolation.
+    caused it. This covers the network layer only; browser subrequests and
+    redirects inside Chrome are checked by scripts/e2b_network_browser_check.py.
     """
     # Check whether sandbox_type is None.
     if sandbox_type is None:
@@ -181,11 +410,10 @@ def run_preflight(*, sandbox_type: Any = None) -> dict:
 
         # Set sandbox_type to Sandbox.
         sandbox_type = Sandbox
-    # Set sandbox to sandbox_type.create(timeout=120, network={'deny_out': ['0.0.0.0/0'],
-    # 'allow_out': ['en.wikipedia.org'], 'allow_public_traffic': False}).
+    # Set sandbox to sandbox_type.create(timeout=240, network={...}, lifecycle={...}).
     sandbox = sandbox_type.create(
-        # Set timeout to (120,).
-        timeout=120,
+        # Set timeout to 240 seconds: the probe below may take up to 170 s.
+        timeout=240,
         # Pass keyword network = a new dictionary with keys 'deny_out', 'allow_out',
         # 'allow_public_traffic'.
         network={
@@ -197,16 +425,18 @@ def run_preflight(*, sandbox_type: Any = None) -> dict:
             # Include allow_public_traffic in this dictionary.
             "allow_public_traffic": False,
         },
+        # Ask E2B to destroy (not pause) the desktop if its lifetime runs out.
+        lifecycle={"on_timeout": "kill"},
     )
     # Try the following operations; matching except clauses handle failures. The finally block runs
     # on every exit.
     try:
-        # Set result to sandbox.commands.run('python3 -c ' + shlex.quote(PROBE), timeout=75).
-        # Worst case is 2 HTTP probes x 10 s + 5 TCP probes x 5 s + one DNS lookup, about 50 s;
-        # 75 s leaves margin and still ends well inside the desktop's 120-second lifetime.
+        # Set result to sandbox.commands.run('python3 -c ' + shlex.quote(PROBE), timeout=170).
+        # Worst case is about 130 s if every probe hits its timeout (HTTP 10 s, TCP/TLS 5-8 s,
+        # UDP 5 s, plus DNS); 170 s leaves margin and ends inside the 240-second lifetime.
         result = sandbox.commands.run(
-            # Pass keyword timeout = 75.
-            "python3 -c " + shlex.quote(PROBE), timeout=75,
+            # Pass keyword timeout = 170.
+            "python3 -c " + shlex.quote(PROBE), timeout=170,
         )
         # Return json.loads(result.stdout).
         return json.loads(result.stdout)

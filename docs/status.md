@@ -53,6 +53,13 @@ This is an evidence summary, not a declaration that Week 1 is complete.
   Edge/E2B check rendered the desktop despite controlled essential/optional file
   failures; no model calls. See
   [viewer recovery handoff](handoffs/2026-11-16-codex-viewer-connection.md).
+- Network boundary (W1-F10): two live preflight and two live browser-check runs
+  passed. Allowed names are routed by name (guest's chosen IP ignored), private IPs
+  blocked, shared-IP names and off-host redirects closed, page subrequests and meta
+  refresh blocked by the filter. Exceptions: `8.8.8.8` open on all ports; domain
+  fronting works for self-composed traffic. Narrowed: no model code execution, no
+  guest secrets. See [preflight](e2b-preflight.md) and
+  [handoff](handoffs/2026-11-16-claude-w1-f10-network-completion.md).
 - Before baseline commit: 194 Python tests passed; web TypeScript checking and
   production build passed. These checks do not establish live E2B behavior.
 
@@ -69,15 +76,30 @@ All tasks below are unassigned. Claim only the task you are actually starting.
 | --- | --- | --- | --- |
 | W1-1 | Diagnose the real noVNC connection; visually confirm the remote page renders and model actions are visible | Unassigned | Done for the fixture (F08): user saw the real desktop and the live scroll; see [viewer handoff](handoffs/2026-11-13-claude-w1-1-live-viewer.md) |
 | W1-2 | Inspect the screenshots delivered to the vision model and demonstrate correct observation, scrolling, and final answer | Unassigned | Fixture done (F07): one live pass with inspected PNGs, see [handoff](handoffs/2026-11-13-claude-w1-f07-model-scroll.md). Earlier wrong answer was `visual=51,174` (format check added); public-page case is W1-6 |
-| W1-3 | Finish controlled live network checks for private/backend destinations, redirects/subrequests, IPv6, and DNS behavior; document provider exceptions and limits | Unassigned | Open; preliminary live probes and local interception checks exist. IPv6 checked November 16: one live run, no guest IPv6 route. Redirects, DNS rebinding, subrequests remain |
-| W1-4 | Compare two model candidates on the same fixed research task; record configuration, correctness/citation support, cost, and latency | Unassigned | Open |
-| W1-5 | Record a cited research trace, provider termination evidence, and remaining limitations; reconcile README with implemented CLI demos and draft-only dashboard | Unassigned | Open; termination evidence done (F11, [termination](e2b-termination.md)); trace and README remain |
+| W1-3 | Finish controlled live network checks for private/backend destinations, redirects/subrequests, IPv6, and DNS behavior; document provider exceptions and limits | Unassigned | Done November 16 (two live runs each): firewall routes allowed names by name, private IPs blocked, redirects/subrequests blocked. Exceptions `8.8.8.8` and domain fronting accepted with narrowing; see [preflight](e2b-preflight.md#completion-results-november-16-2026) |
+| W1-4 | Compare two model candidates on the same fixed research task; record configuration, correctness/citation support, cost, and latency | Unassigned | Open; deferred by the user November 16. Groq lists one vision model (`qwen/qwen3.8-27b`); `gpt-oss-*` are text-only; only a Groq key is configured. Second candidate (text loop or another vision provider) is the user's decision |
+| W1-5 | Record a cited research trace, provider termination evidence, and remaining limitations; reconcile README with implemented CLI demos and draft-only dashboard | Unassigned | Done November 16: [traces](week1-traces.md), [decision 0003](decisions/0003-week1-outcome.md), README updated; termination evidence from F11 |
 | W1-6 | Connect permitted public-page research to screenshot observation and model-selected scrolling; produce a cited answer while the user watches the same desktop (plan W1-F09) | Unassigned | Done (F09): user watched a live Wikipedia pass with a cited, on-screen-verified answer; see [W1-6 handoff](handoffs/2026-11-13-claude-w1-6-visual-research.md) |
 
-Suggested next task: W1-3 (network checks), the gate for broad public browsing (W1X-F02). Do not start Week 2 orchestration
+Suggested next task: decide W1-4's second model candidate (user), the last Week 1 gate. W1X-F02 needs a new
+network design (public allowed, private denied) and its own rerun of the W1-F10 checks. Do not start Week 2 orchestration
 on the assumption that Week 1's networking and live-view boundaries are resolved.
 
 ## Active ownership
+
+W1-5 / W1-F13 completed and released by Claude on November 16, 2026. Added
+[annotated traces](week1-traces.md) from three saved live runs (screenshots
+checked), [decision 0003](decisions/0003-week1-outcome.md) on the Week 1 outcome, and a
+README section listing the CLI scripts separately from the draft-only dashboard.
+Docs only; no code or live runs. See
+[handoff](handoffs/2026-11-16-claude-w1-f13-traces-readme.md). Uncommitted.
+
+W1-3 / W1-F10 completed and released by Claude on November 16, 2026. Added DNS,
+name-bound (rebinding), shared-IP, fronting, and redirect probes to the preflight;
+new live browser subrequest check plus a local Edge version. 446 tests passed; two
+live preflight and two live browser runs passed. Accepted exceptions: `8.8.8.8`
+open on all ports, domain fronting; narrowed by having no code-execution tool. See
+[handoff](handoffs/2026-11-16-claude-w1-f10-network-completion.md). Uncommitted.
 
 READ-VISIBLE-LINKS completed and released by Codex on November 16, 2026. Replaced
 the screenshot-permission check inside `visible_links()` with explicit

@@ -2,7 +2,12 @@
 
 A general-purpose workspace where agents operating isolated computers coordinate everyday tasks. Built as a learning project focused on applied AI, reliable distributed execution, and externally enforced agent permissions.
 
-**Current implementation:** the local dashboard saves and deletes task drafts through FastAPI and PostgreSQL. Separate Python CLI demos run bounded text and screenshot-based research on E2B with Groq, including model-selected scrolling and a local live viewer. The dashboard does not start these agents. Temporal, multi-agent messaging, and automatic retention remain planned.
+**Current implementation:** two separate parts that are not connected yet.
+
+- **Dashboard (draft-only).** The local Next.js dashboard saves and deletes task drafts through FastAPI and PostgreSQL. It does not start, run, or watch agents. Saved limits such as workers and budget are validated but not enforced on any run.
+- **Agent (CLI only).** Python scripts run one agent on a real E2B cloud desktop with a Groq vision model. It researches Wikipedia from screenshots, scrolls, clicks links, and gives a cited answer. You can watch it in a local live viewer. See [Run the agent from the command line](#run-the-agent-from-the-command-line).
+
+Temporal, durable runs, multi-agent messaging, connecting the dashboard to execution, and automatic retention remain planned.
 
 Start with the [codebase guide](docs/codebase.md) for the file structure, reading order, and execution paths. See [current status](docs/status.md) for observed results and remaining checks.
 
@@ -65,6 +70,32 @@ To stop the database without deleting saved drafts:
 docker compose stop db
 ```
 
+## Run the agent from the command line
+
+These scripts are separate from the dashboard. Most of them create a metered E2B desktop, and the model demos also make paid Groq requests. They need `E2B_API_KEY`, and the model demos need `GROQ_API_KEY`. Set them in your shell, or in the ignored root `.env`, which the scripts load without overwriting values already set. Install the optional dependencies first:
+
+```bash
+pip install -e '.[e2b,groq]'
+```
+
+Run each from the repository root with `.venv/bin/python scripts/<name>`.
+
+| Script | What it does | Needs |
+|---|---|---|
+| `e2b_visual_research_demo.py --watch` | Finds a value in the Boston article from screenshots and scrolling, then answers. Graded on whether the value was on screen at finish. | E2B, Groq |
+| `e2b_click_demo.py --watch` | Clicks from the Boston article to Massachusetts using browser-measured link IDs. | E2B, Groq |
+| `e2b_vision_agent_demo.py --watch` | Model-selected scrolling on a controlled test page. | E2B, Groq |
+| `groq_e2b_demo.py --trace` | Text-only research loop: page text instead of screenshots. | E2B, Groq |
+| `e2b_preflight.py` | Network-layer checks: what the desktop can and cannot reach. | E2B |
+| `e2b_network_browser_check.py` | Browser checks: subrequests, redirects, and meta refresh are blocked. | E2B |
+| `e2b_click_check.py` | Click safety checks with the real pointer; no model. | E2B |
+| `e2b_termination_check.py` | Confirms E2B really destroys desktops. | E2B |
+| `smoke_*.py` | Local browser checks with no E2B, model, or paid calls. | Microsoft Edge |
+
+`--watch` opens a private local viewer and waits for you before the agent starts. `--save-screenshots` (research and click demos) writes the model's input images and `result.json` under the ignored `.demo-artifacts/` folder.
+
+What the agent may do is fixed in code: an exact host allowlist, a short tool list with no code execution, and network limits enforced outside the model. Known limits are recorded in [network preflight](docs/e2b-preflight.md). Annotated runs, including failures, are in [Week 1 traces](docs/week1-traces.md).
+
 ## Project map
 
 | Path | Purpose |
@@ -91,4 +122,4 @@ and explanations of JSON configuration, which cannot contain comments.
 * [Six-week implementation and learning plan](docs/implementation-plan.md)
 * [First learning exercise: durable task drafts](docs/learning/01-task-drafts.md)
 
-Next milestones: finish live network and desktop-cleanup evidence, compare model candidates, then add durable execution. See the status document for the remaining Week 1 gates.
+Next milestones: choose and run the deferred two-model comparison, then add durable execution (Week 2). Week 1's outcome and open items are in [decision 0003](docs/decisions/0003-week1-outcome.md).

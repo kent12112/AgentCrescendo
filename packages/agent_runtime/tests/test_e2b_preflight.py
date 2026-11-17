@@ -13,7 +13,7 @@ import pytest
 # Import from crescendo_agent.e2b_preflight: the probe text, the rule groups, the evaluator, and
 # the runner under test.
 from crescendo_agent.e2b_preflight import (
-    INFORMATIONAL, MUST_BLOCK, MUST_REACH, PROBE, evaluate_preflight, run_preflight,
+    INFORMATIONAL, MUST_BLOCK, MUST_REACH, NAME_BOUND, PROBE, evaluate_preflight, run_preflight,
 )
 
 
@@ -37,6 +37,17 @@ def expected_results():
         "private_ipv6_tcp": {"reachable": False, "error": "ENETUNREACH"},
         # Include wikipedia_ipv6_tcp, reachable, error in this dictionary.
         "wikipedia_ipv6_tcp": {"reachable": False, "error": "ENETUNREACH"},
+        "dns_lookup_unlisted": {"resolved": True},
+        "dns_udp_default_resolver": {"reachable": True},
+        "dns_udp_other_resolver": {"reachable": False, "error": "TimeoutError"},
+        "default_resolver_tcp443": {"reachable": True},
+        "sni_to_unlisted_ip": {"outcome": "allowed_server"},
+        "host_header_to_unlisted_ip": {"outcome": "blocked", "error": "ECONNRESET"},
+        "sni_to_private_ip": {"outcome": "allowed_server"},
+        "shared_ip_unlisted_name": {"reachable": False, "error": "ECONNRESET"},
+        "domain_fronting": {"reachable": True, "http_status": 200, "served_other_site": True},
+        "offhost_redirect": {"http_status": 301, "location_host": "en.wiktionary.org",
+                             "reachable": False, "error": "ECONNRESET"},
     }
 
 
@@ -57,18 +68,20 @@ def test_network_is_restricted_from_creation_and_desktop_is_destroyed():
 
     # Call factory.create.assert_called_once_with with no arguments.
     factory.create.assert_called_once_with(
-        # Set timeout to (120,).
-        timeout=120,
+        # Set timeout to 240 seconds.
+        timeout=240,
         # Pass keyword network = a new dictionary with keys 'deny_out', 'allow_out',
         # 'allow_public_traffic'.
         network={"deny_out": ["0.0.0.0/0"], "allow_out": ["en.wikipedia.org"],
                  # Include allow_public_traffic in this dictionary.
                  "allow_public_traffic": False},
+        # Destroy, not pause, if the lifetime runs out.
+        lifecycle={"on_timeout": "kill"},
     )
     # Call sandbox.kill.assert_called_once_with with no arguments.
     sandbox.kill.assert_called_once_with()
-    # Assert that the remote command may run for 75 seconds, inside the 120-second lifetime.
-    assert sandbox.commands.run.call_args.kwargs["timeout"] == 75
+    # Assert that the remote command may run for 170 seconds, inside the 240-second lifetime.
+    assert sandbox.commands.run.call_args.kwargs["timeout"] == 170 < 240
 
 
 # Define test_probe_compiles_and_emits_every_judged_name with no parameters.
@@ -76,7 +89,7 @@ def test_probe_compiles_and_emits_every_judged_name():
     # Compile the remote source locally: a syntax error would otherwise appear only in a paid run.
     compile(PROBE, "<e2b preflight probe>", "exec")
     # Check every name the evaluator judges.
-    for name in MUST_REACH + MUST_BLOCK + INFORMATIONAL:
+    for name in MUST_REACH + MUST_BLOCK + INFORMATIONAL + NAME_BOUND + ("dns_lookup_unlisted", "offhost_redirect"):
         # Assert that the probe writes a result under exactly that quoted name.
         assert f'"{name}"' in PROBE
 
@@ -209,3 +222,174 @@ def test_cleanup_runs_when_command_or_output_fails(failure):
         run_preflight(sandbox_type=factory)
     # Call sandbox.kill.assert_called_once_with with no arguments.
     sandbox.kill.assert_called_once_with()
+
+
+# ---------------------------------------------------------------------------
+# Name-bound probes, DNS notes, and the redirect rule (W1-F10 completion).
+# ---------------------------------------------------------------------------
+
+# Run once per probe that presents the allowed name to another IP.
+@pytest.mark.parametrize("name", NAME_BOUND)
+def test_allowed_name_reaching_another_server_fails(name):
+    # "other_server" means the firewall forwarded to the IP the guest chose.
+    results = expected_results()
+    results[name] = {"outcome": "other_server", "error": "SSLCertVerificationError"}
+    verdict = evaluate_preflight(results)
+    assert not verdict.passed
+    assert verdict.failures == (f"{name}: the allowed name reached a different server; the allowlist "
+                                "does not constrain the destination IP. Do not enable browsing.",)
+
+
+# Ambiguous or missing outcomes must never count as a pass.
+@pytest.mark.parametrize("outcome", ["tls_alert", "not_run", None, "reachable"])
+def test_ambiguous_name_bound_outcome_fails_closed(outcome):
+    results = expected_results()
+    results["sni_to_unlisted_ip"] = {"outcome": outcome} if outcome else {}
+    verdict = evaluate_preflight(results)
+    assert verdict.failures == (f"sni_to_unlisted_ip: outcome {outcome!r} is missing or ambiguous; "
+                                "the evidence is incomplete.",)
+
+
+def test_dns_and_fronting_exceptions_are_notes_not_failures():
+    # Known, documented gaps are reported, but do not fail the run.
+    verdict = evaluate_preflight(expected_results())
+    assert verdict.passed
+    joined = "\n".join(verdict.notes)
+    for prefix in ("dns_lookup_unlisted resolved", "dns_udp_default_resolver accepted",
+                   "default_resolver_tcp443 accepted", "domain_fronting served another site",
+                   "sni_to_unlisted_ip: routed to the real allowed server",
+                   "offhost_redirect: redirect to en.wiktionary.org was not reachable (ECONNRESET)"):
+        assert prefix in joined
+
+
+def test_reachable_offhost_redirect_fails():
+    results = expected_results()
+    results["offhost_redirect"]["reachable"] = True
+    assert evaluate_preflight(results).failures == (
+        "offhost_redirect: redirect destination en.wiktionary.org was reachable; do not enable browsing.",)
+
+
+@pytest.mark.parametrize("entry", [None, {}, {"location_host": "en.wiktionary.org"},
+                                   {"location_host": "en.wiktionary.org", "reachable": "no"}])
+def test_malformed_redirect_result_fails_closed(entry):
+    results = expected_results()
+    if entry is None:
+        del results["offhost_redirect"]
+    else:
+        results["offhost_redirect"] = entry
+    assert evaluate_preflight(results).failures == (
+        "offhost_redirect: missing or malformed result; the evidence is incomplete.",)
+
+
+@pytest.mark.parametrize("host", [None, "en.wikipedia.org"])
+def test_redirect_that_stays_on_host_is_only_a_note(host):
+    results = expected_results()
+    results["offhost_redirect"] = {"http_status": 200, "location_host": host}
+    verdict = evaluate_preflight(results)
+    assert verdict.passed
+    assert "offhost_redirect not exercised: the page did not redirect to another host." in verdict.notes
+
+
+def test_malformed_dns_lookup_fails_closed():
+    results = expected_results()
+    results["dns_lookup_unlisted"] = {"resolved": "yes"}
+    assert evaluate_preflight(results).failures == (
+        "dns_lookup_unlisted: missing or malformed result; the evidence is incomplete.",)
+
+
+# ---------------------------------------------------------------------------
+# The probe's own helper functions, run here against loopback servers only.
+# Everything in PROBE before the first probe loop is definitions, so executing
+# that part makes no connection.
+# ---------------------------------------------------------------------------
+
+import socket
+import threading
+
+
+@pytest.fixture
+def probe_helpers():
+    namespace = {}
+    exec(PROBE.split("\nfor name, url in")[0], namespace)
+    return namespace
+
+
+def _serve_once(reply, kind=socket.SOCK_STREAM):
+    """Start a one-shot loopback server. reply=None: accept, then close at once."""
+    server = socket.socket(socket.AF_INET, kind)
+    server.bind(("127.0.0.1", 0))
+    port = server.getsockname()[1]
+    if kind == socket.SOCK_STREAM:
+        server.listen(1)
+
+    def run():
+        with server:
+            if kind == socket.SOCK_DGRAM:
+                data, address = server.recvfrom(512)
+                server.sendto(data[:2] + b"\x81\x80", address)  # echo the query ID
+                return
+            connection, _ = server.accept()
+            with connection:
+                if reply is not None:
+                    connection.recv(4096)
+                    connection.sendall(reply)
+
+    threading.Thread(target=run, daemon=True).start()
+    return port
+
+
+def _closed_port():
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def test_tls_helper_reports_blocked_when_peer_closes_or_refuses(probe_helpers):
+    tls = probe_helpers["tls_as_allowed_name"]
+    assert tls("127.0.0.1", _serve_once(None))["outcome"] == "blocked"
+    assert tls("127.0.0.1", _closed_port()) == {"outcome": "blocked", "error": "ECONNREFUSED"}
+
+
+def test_tls_helper_reports_non_tls_answer_as_ambiguous(probe_helpers):
+    # Plain text instead of TLS: neither "blocked" nor a proven identity.
+    outcome = probe_helpers["tls_as_allowed_name"]("127.0.0.1", _serve_once(b"HTTP/1.1 400 Bad\r\n\r\n"))
+    assert outcome["outcome"] == "tls_alert"
+
+
+def test_http_helper_classifies_reply_by_location(probe_helpers, monkeypatch):
+    helper = probe_helpers["http_as_allowed_name"]
+    real_connect = socket.create_connection
+
+    def aim_at(port):
+        # Port 80 is fixed inside the helper; send its connection to our server instead.
+        fake = type("FakeSocketModule", (), {"create_connection": staticmethod(
+            lambda address, timeout: real_connect(("127.0.0.1", port), timeout))})
+        monkeypatch.setitem(helper.__globals__, "socket", fake)
+
+    aim_at(_serve_once(b"HTTP/1.1 301 Moved\r\nLocation: https://en.wikipedia.org/wiki/Boston\r\n\r\n"))
+    assert helper("ignored")["outcome"] == "allowed_server"
+    aim_at(_serve_once(b"HTTP/1.1 404 Not Found\r\nServer: other\r\n\r\n"))
+    assert helper("ignored") == {"outcome": "other_server", "status_line": "http/1.1 404 not found"}
+    aim_at(_serve_once(None))
+    # Closing without reading can surface as an empty reply or a reset; both are "blocked".
+    assert helper("ignored")["outcome"] == "blocked"
+
+
+def test_dns_helper_needs_matching_reply_id(probe_helpers, monkeypatch):
+    helper = probe_helpers["dns_udp"]
+    port = _serve_once(None, kind=socket.SOCK_DGRAM)
+    real_socket = socket.socket
+
+    class ToLoopback(real_socket):
+        def sendto(self, data, address):
+            return super().sendto(data, ("127.0.0.1", port))
+
+    monkeypatch.setitem(helper.__globals__, "socket", type("FakeSocketModule", (), {
+        "socket": ToLoopback, "AF_INET": socket.AF_INET, "SOCK_DGRAM": socket.SOCK_DGRAM}))
+    assert helper("8.8.8.8") == {"reachable": True}
+
+
+def test_tls_errors_are_named_by_type_not_by_openssl_code(probe_helpers):
+    # OpenSSL's SSL_ERROR_EOF is 8; as an OS errno, 8 would wrongly read ENOEXEC.
+    import ssl
+    assert probe_helpers["error_name"](ssl.SSLEOFError(8, "EOF occurred in violation of protocol")) == "SSLEOFError"
