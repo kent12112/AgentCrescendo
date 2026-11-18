@@ -70,7 +70,8 @@ def current_index(session) -> PostingIndex:
     """The in-memory index, reloaded when the latest crawl or the open-posting count changes."""
     global _index
     run = last_crawl(session)
-    count = session.scalar(select(func.count()).select_from(JobPosting).where(JobPosting.closed_at.is_(None)))
+    count = session.scalar(select(func.count()).select_from(JobPosting).where(
+        JobPosting.source == "ashby", JobPosting.closed_at.is_(None)))
     key = (run.id if run else None, run.status if run else None, count)
     with _index_lock:
         if _index is not None and _index.key == key:

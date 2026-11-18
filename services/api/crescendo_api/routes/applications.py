@@ -27,7 +27,7 @@ class ApplicationBody(BaseModel):
     status: Literal["ready", "applied", "interviewing", "offer", "rejected", "withdrawn"] = "applied"
     applied_on: date | None = None
     follow_up_on: date | None = None
-    notes: str = Field(default="", max_length=8000)
+    notes: str = Field(default="", max_length=8000, pattern=r"^[^\x00]*$")
     version: int | None = Field(default=None, ge=1)
 
 

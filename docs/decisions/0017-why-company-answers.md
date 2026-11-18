@@ -8,7 +8,7 @@ of 0015. No saved letter, PDF, or Writer table is deleted.
 
 ## What changed
 
-- **Output.** One to two short paragraphs, 100–200 words, first person, no greeting
+- **Output.** Two or three paragraphs, about 300 words (260–340; user, November 18), first person, no greeting
   or signature, with a Copy button. The page no longer offers the live Writer, PDF,
   print, or text download. Their backend routes and tables remain for old data
   and are no longer linked; removing them is a separate decision.
@@ -23,7 +23,7 @@ of 0015. No saved letter, PDF, or Writer table is deleted.
   connection, outline), Worker writes the cited answer, Verifier accepts or returns
   numbered issues. Fixed schedule T → W → V → W → V: at most five requests, stopping
   early on acceptance, and no new turn after 200 s. Acceptance requires the Verifier
-  **and** host checks (quote found, numbers verbatim, no placeholders, 60–230 words).
+  **and** host checks (quote found, numbers verbatim, no placeholders, at most 380 words; shorter answers are the Verifier's call).
   Each finished turn is saved to `cover_letters.turns` (migration `0010`) and shown live.
 
 ## Why this reading of the paper

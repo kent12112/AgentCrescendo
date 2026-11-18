@@ -48,7 +48,7 @@ Plan the strongest honest argument:
 - connection: one or two sentences of reasoning that link them through a shared user
   problem, technical tradeoff, or way of working. It must stop making sense if the
   company's name were replaced with a competitor's.
-- outline: two to four ordered moves for a 100-200 word answer.
+- outline: three to five ordered moves for an answer of about 300 words.
 - avoid: specific pitfalls for this case (thin facts, tempting unsupported claims,
   generic praise). If company facts are thin, say so and anchor on the posting's work.
 
@@ -72,8 +72,8 @@ Argument:
   history with the company, admiration, or shared values the sources do not state.
 - Swap test: if replacing the company name leaves the answer true, it is too generic.
 
-Form: one or two short paragraphs (three at most), 100-200 words; fewer if sources are
-thin. Never pad. Direct, specific, human. No greeting, sign-off, name, contact details,
+Form: two or three paragraphs, about 300 words (260-340); shorter only if the sources
+are too thin to support more. Never pad. Direct, specific, human. No greeting, sign-off, name, contact details,
 placeholders, markdown, "I am writing to", keyword lists, or clichés such as
 'passionate', 'eager', 'perfect fit', 'leveraging', 'cutting-edge', 'blend of expertise'.
 On a revision turn, fix every verifier_feedback issue and host_checks problem while
@@ -110,7 +110,8 @@ Accept only if all hold:
    outcomes; motivation is not invented.
 4. The link between the candidate's experience and the company's work is explained, not
    merely asserted.
-5. 100-200 words (230 at most), no greeting, sign-off, name, placeholders or clichés;
+5. About 300 words (260-340; up to 380 is acceptable, shorter only when the sources are
+   genuinely thin), no greeting, sign-off, name, placeholders or clichés;
    reads as a direct, human answer.
 
 If anything fails, set accept to false and give at most five issues. Each issue names the
@@ -299,10 +300,10 @@ def host_problems(text: str, checks: list[dict]) -> list[str]:
     problems = [f"Sentence {i}: {flag}" for i, check in enumerate(checks, 1)
                 for flag in check["flags"] if any(hard in flag for hard in HARD_FLAGS)]
     words = len(text.split())
-    if words > 230:
-        problems.append(f"The answer has {words} words; keep it within 100-200.")
-    elif words < 60:
-        problems.append(f"The answer has only {words} words; develop the argument if the sources allow.")
+    # Over-length always blocks. Short answers are left to the Verifier, which can
+    # see whether the sources support more; padding thin sources is worse.
+    if words > 380:
+        problems.append(f"The answer has {words} words; aim for about 300 (at most 340).")
     return problems
 
 
@@ -365,7 +366,7 @@ def provider_failure(error: Exception, what: str = "answer") -> ProviderDown:
 SCHEDULE = ("thinker", "worker", "verifier", "worker", "verifier")
 TURN_TIMEOUT = 50.0      # per provider request
 DEADLINE_SECONDS = 200.0  # stop starting new turns after this; the proxy waits 300 s
-TOKENS = {"thinker": 2048, "worker": 3072, "verifier": 1536}
+TOKENS = {"thinker": 2048, "worker": 4096, "verifier": 1536}
 
 
 def _ask(client, model: str, role: str, system: str, payload: dict, schema: type[BaseModel]):

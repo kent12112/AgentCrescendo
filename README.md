@@ -6,6 +6,11 @@ A general-purpose workspace where agents operating isolated computers coordinate
 
 - **Job workspace.** Upload a resume, search and rank stored postings, select up to three jobs, preview the resume with identity removed, and explicitly confirm before Groq drafts letters from the resume, job description, company name, and optional company notes. Review source quotes/flags, edit, approve, and download text. Open a real offline E2B Writer desktop, watch it type the approved letter, and download the verified PDF saved in local PostgreSQL. Company notes are user-supplied context; independent company browser research remains open.
 - **Task drafts.** The original draft dashboard remains at `/drafts`. Run start records a stable Temporal workflow, whose activity is still a placeholder; it does not execute desktop agents. Draft worker/budget limits do not control letter generation.
+- **Applications.** In Ashby job search, choose **Mark applied** after submitting an
+  application yourself. Open **Applications** (`/jobs/applications`) to update its
+  status, applied date, notes, and follow-up date. The saved posting survives crawl
+  cleanup. Search can hide applied jobs. Tracking stays local and needs no provider
+  key; it does not submit applications or send reminders.
 - **Agent (CLI only).** Python scripts run one agent on a real E2B cloud desktop with a Groq vision model. It researches Wikipedia from screenshots, scrolls, clicks links, and gives a cited answer. You can watch it in a local live viewer. See [Run the agent from the command line](#run-the-agent-from-the-command-line).
 
 Durable desktop runs, multi-agent messaging, company research desktops, and automatic retention remain planned. The connected Writer export is currently owned by one local API process.

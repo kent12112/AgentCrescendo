@@ -69,6 +69,6 @@ See [decision 0017](../decisions/0017-why-company-answers.md) and
    during SEARCH-TRACKER's in-progress edits. I did not edit `job-shell.tsx`, `types.ts`
    or CSS. `scripts/smoke_job_search.py` still drives the removed live-Writer UI and will
    fail at the letters step; I left it for whoever owns the search smoke now.
-3. Review questions: is 100–200 words right for your forms? Should Thinker/Verifier
+3. Review questions: length set to about 300 words at the user's request (follow-up, same day). Should Thinker/Verifier
    use a different model than the Worker (closer to the paper's model pool)? Should the
    unused Writer/PDF backend be removed?

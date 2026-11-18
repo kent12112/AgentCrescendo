@@ -209,3 +209,10 @@ def test_posting_without_research_still_drafts(sdk):
     posting = {k: v for k, v in POSTING.items() if k != "company_research"}
     _, checks = generate_draft(INPUTS, posting, "fake-key")
     assert checks[0]["source"] == "company_research" and checks[0]["quote_found"] is False
+
+
+def test_length_rule_blocks_over_380_words_but_leaves_short_answers_to_the_verifier():
+    assert letters.host_problems("word " * 300, []) == []
+    assert letters.host_problems("word " * 120, []) == []  # thin sources: Verifier decides
+    assert "aim for about 300" in letters.host_problems("word " * 381, [])[0]
+    assert "about 300 words" in letters.WORKER and "about 300 words" in letters.THINKER

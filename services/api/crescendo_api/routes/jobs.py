@@ -60,7 +60,7 @@ def search_jobs(
     max_age_days: Annotated[int, Query(ge=1, le=30)] = 30,
     offset: Annotated[int, Query(ge=0, le=10_000)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    source: Annotated[str, Query(pattern=SOURCE)] = "ashby",
+    source: Annotated[str, Query(pattern=r"^ashby$")] = "ashby",
     hide_applied: bool = False,
 ):
     resume = _resume(session)

@@ -26,6 +26,15 @@ features. See [decision 0015](decisions/0015-tool-first-job-agents.md) and
 
 ## Implemented and observed
 
+- Simplified Ashby search and manual application tracking (November 18, Codex):
+  three-link navigation, advanced filters collapsed, conditional research shortlist;
+  Mark applied → saved posting snapshot, six statuses, dates, notes, follow-up,
+  status/text filters, version-checked updates/removal, search badges/hide-applied.
+  **971 passed, 4 skipped**, TypeScript, isolated browser/mobile smoke and production
+  build passed. Local PostgreSQL at `0011`; schema check passed; API and pages 200.
+  No model calls or search-speed benchmark. Claude's Why-company files preserved.
+  See [handoff](handoffs/2026-11-18-codex-search-tracker.md) and
+  [decision 0018](decisions/0018-simplified-search-and-applications.md).
 - Company-specific letter writing (November 18, Codex): revised fit-argument
   prompt, primary plus additional sentence quotes, source-review display and more
   useful company-context guidance. **944 passed, 4 skipped**, TypeScript,
@@ -180,12 +189,13 @@ E2B, Chrome, or SDK upgrades.
 
 ## Active ownership
 
-SEARCH-TRACKER **claimed by Codex** primary session November 18, 2026. Simplify
-Ashby search and add persistent manual application tracking. Expected edits:
-job search/card/shell/side-panels/types/API/CSS, new applications page/proxies,
-`routes/jobs.py`, `job_search.py`, new application model/migration/tests, docs.
-Claude's WHY-COMPANY files remain reserved; coordination question pending with
-the user. No agents spawned or Claude launched.
+SEARCH-TRACKER **implemented and released by Codex** primary session November 18,
+2026. Search/card/shell/side-panels/types/API/CSS, applications page/proxies,
+API routes/search, separate tracker model, migration `0011`, tests/smoke and docs.
+User explicitly kept Claude's WHY-COMPANY files with that session; they were not
+edited by Codex. All local checks passed; database migrated; running app available.
+No agents spawned, Claude launched, commits, pushes, or deployments by Codex.
+See [handoff](handoffs/2026-11-18-codex-search-tracker.md). Ownership released.
 
 WHY-COMPANY **implemented and released by Claude** (VS Code session) November 18,
 2026. "Why [company]?" answers with Copy (no PDF/Writer in the page), a company

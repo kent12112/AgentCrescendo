@@ -224,9 +224,15 @@ slices first; multi-agent steps land with Weeks 3–4.
   desktop and stored verified PDF are now connected and live-tested; independent
   company browsing and durable multi-desktop orchestration keep the full task open.
   See [decision 0012](decisions/0012-live-writer-exports.md).
-- [ ] JOB-F09: Application tracker. Statuses ready → applied → interviewing → offer/rejected/
+- [x] JOB-F09: Application tracker. Statuses ready → applied → interviewing → offer/rejected/
   withdrawn with dates, notes, follow-up; marked by the user; posting copy kept beyond the
   30-day window; "Applied" badges and hide-applied in search.
+  November 18: manual Mark applied → `/jobs/applications`; independent posting
+  snapshot, six statuses, editable calendar dates/notes/follow-up, filtering,
+  version-checked edits/removal, and badges/filtering before search pagination.
+  Migration `0011`; API/migration and fictional real-browser checks, including
+  reload and posting deletion. Ready is manual; answer approval creates no tracker
+  entry. See [decision 0018](decisions/0018-simplified-search-and-applications.md).
 - [x] JOB-F10: Resume upload in the local app; extracted text stored in local Postgres as the
   0009 fact source (PDF not kept); redaction still applies before any Groq request.
   November 17: Claude's upload/search API preserved; Codex connected input-preview

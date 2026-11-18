@@ -77,13 +77,12 @@ def test_search_badges_hide_applied_and_pagination_refresh_without_recrawl(clien
     assert client.get("/jobs/search", params={**params, "hide_applied": True}, headers=AUTH).json()["total"] == 2
 
 
-def test_ashby_is_default_source_and_other_sources_still_explicitly_searchable(client, engine):
+def test_search_is_explicitly_ashby_only(client, engine):
     ashby = posting_row(0)
     lever = posting_row(1)
     lever.source = "lever"
     seed(engine, ashby, lever)
     upload(client)
     assert client.get("/jobs/search?q=ai+engineer", headers=AUTH).json()["total"] == 1
-    page = client.get("/jobs/search?q=ai+engineer&source=lever", headers=AUTH).json()
-    assert page["total"] == 1 and page["results"][0]["source"] == "lever"
+    assert client.get("/jobs/search?q=ai+engineer&source=lever", headers=AUTH).status_code == 422
     assert client.get("/jobs/search?q=ai&source=unknown", headers=AUTH).status_code == 422

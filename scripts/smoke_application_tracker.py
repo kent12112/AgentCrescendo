@@ -68,10 +68,12 @@ def run_browser(origin, artifacts, database_url):
         page.get_by_label("Looking for", exact=True).fill("ai engineer")
         page.get_by_role("checkbox", name="Pick AI Engineer at Fictional Co 0", exact=True).check()
         expect(page.get_by_role("link", name="Craft Why-company answers", exact=True)).to_be_visible()
-        page.locator("article").first.get_by_role("button", name="Mark applied", exact=True).click()
+        selected_card = page.locator("article").filter(has=page.get_by_role("heading", name="AI Engineer · Fictional Co 0", exact=True))
+        selected_card.get_by_role("button", name="Mark applied", exact=True).click()
         expect(page.get_by_role("status")).to_contain_text("saved to your application tracker")
-        expect(page.locator("article").first.get_by_role("link", name="Applied ·")).to_be_visible()
-        page.screenshot(path=str(artifacts / "search-desktop.png"), full_page=True)
+        expect(selected_card.get_by_role("link", name="Applied ·")).to_be_visible()
+        page.evaluate("window.scrollTo(0, 0)")
+        page.screenshot(path=str(artifacts / "search-desktop.png"))
 
         page.get_by_label("Hide applied jobs", exact=True).check()
         page.get_by_role("button", name="Search jobs", exact=True).click()
@@ -86,7 +88,7 @@ def run_browser(origin, artifacts, database_url):
         expect(page.locator("article")).to_have_count(1)
         page.get_by_text("Update application", exact=True).click()
         form = page.locator("article form")
-        form.get_by_label("Status", exact=True).select_option("interviewing")
+        form.get_by_label("Application status", exact=True).select_option("interviewing")
         form.get_by_label("Applied date", exact=True).fill("2026-11-10")
         form.get_by_label("Follow-up date", exact=True).fill("2026-11-11")
         form.get_by_label("Notes", exact=True).fill("Recruiter chat complete. <script>window.fixtureExecuted=true</script>")
@@ -100,9 +102,9 @@ def run_browser(origin, artifacts, database_url):
         page.get_by_label("Find an application", exact=True).fill("unmatched")
         expect(page.get_by_text("No applications match these filters.", exact=True)).to_be_visible()
         page.get_by_label("Find an application", exact=True).fill("")
-        page.get_by_label("Status", exact=True).select_option("offer")
+        page.get_by_label("Filter by status", exact=True).select_option("offer")
         expect(page.locator("article")).to_have_count(0)
-        page.get_by_label("Status", exact=True).select_option("all")
+        page.get_by_label("Filter by status", exact=True).select_option("all")
 
         # Delete only this temporary fixture's posting; the saved snapshot must still render.
         engine = create_engine(database_url)
@@ -120,7 +122,7 @@ def run_browser(origin, artifacts, database_url):
         target = origin + "/api/jobs/applications/ashby/00000000-0000-4000-8000-000000000001"
         assert page.request.put(target, data="{}", headers=headers).status == 403
         assert page.request.delete(target + "?version=1", headers=headers).status == 403
-        assert page.request.put(target, data="{", headers={"Origin": origin, "Content-Type": "application/json"}).status == 400
+        assert page.request.put(target, data=b"{", headers={"Origin": origin, "Content-Type": "application/json"}).status == 400
 
         page.set_viewport_size({"width": 390, "height": 844})
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")

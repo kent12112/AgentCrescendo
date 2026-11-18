@@ -64,7 +64,7 @@ function ApplicationCard({ row, onSave, onRemove }: {
       <summary>Update application</summary>
       <form className={styles.panel} onSubmit={event => void save(event)}>
         <div className={styles.applicationFields}>
-          <label>Status<select value={status} onChange={event => setStatus(event.target.value as ApplicationStatus)} disabled={busy}>
+          <label>Status<select aria-label="Application status" value={status} onChange={event => setStatus(event.target.value as ApplicationStatus)} disabled={busy}>
             {Object.entries(APPLICATION_STATUS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select></label>
           <label>Applied date<input type="date" required={status !== "ready"} value={appliedOn} onChange={event => setAppliedOn(event.target.value)} disabled={busy} /></label>
@@ -116,7 +116,7 @@ export default function ApplicationTracker() {
     </div>
     <div className={`${styles.panel} ${styles.trackerFilters}`}>
       <label>Find an application<input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Company, role, or notes" /></label>
-      <label>Status<select value={status} onChange={event => setStatus(event.target.value)}><option value="all">All statuses</option>
+      <label>Status<select aria-label="Filter by status" value={status} onChange={event => setStatus(event.target.value)}><option value="all">All statuses</option>
         {Object.entries(APPLICATION_STATUS).map(([value, label]) => <option key={value} value={value}>{label} ({rows.filter(row => row.status === value).length})</option>)}
       </select></label>
     </div>
