@@ -112,8 +112,8 @@ def main():
         # Postings without a date are kept; their age is shown as unknown.
         live_postings = [p for p in live_postings if (age_days(p.published_at) or 0) <= args.max_age_days]
     postings += live_postings
+    failed = [r for r in results if r.error]
     if results:
-        failed = [r for r in results if r.error]
         print(f"{len(live_postings)} postings from {len(results) - len(failed)} live boards "
               f"({len(failed)} unavailable).")
     print(f"{len(postings)} postings to rank ({time.monotonic() - started:.0f}s).")
@@ -150,7 +150,8 @@ def main():
         path.write_text(json.dumps({
             "search": args.search, "country": args.country, "location": args.location, "remote": args.remote,
             "max_years": args.max_years, "no_senior": args.no_senior,
-            "resume_skills": sorted(resume_skills), "boards": len(boards),
+            "resume_skills": sorted(resume_skills), "database_postings": len(postings) - len(live_postings),
+            "live_boards": len(boards),
             "unavailable_boards": [f"{r.board.source}:{r.board.slug}: {r.error}" for r in failed],
             "results": [m.as_dict() for m in matches]}, indent=2, ensure_ascii=False) + "\n")
         print("\nSaved:", path.resolve())
@@ -179,8 +180,11 @@ def postings_from_db(max_age_days):
         with Session(engine) as session:
             run = last_crawl(session)
             rows = open_postings(session, window_days=max_age_days or 3650)
-            slugs = {slug for (slug,) in session.execute(
-                select(JobCompany.slug).where(JobCompany.source == "ashby", JobCompany.status != "error"))}
+            # Companies the crawl checked (live or gone); boards that only errored are left to --live.
+            checked = dict(session.execute(
+                select(JobCompany.slug, JobCompany.status).where(JobCompany.source == "ashby",
+                                                                 JobCompany.status != "error")).all())
+            slugs = set(checked)
     except (OperationalError, ProgrammingError) as error:
         raise SystemExit("Postgres is not reachable or not migrated (`docker compose up -d db`, then "
                          f"`alembic upgrade head`), or use --live. ({type(error).__name__})") from None
@@ -188,7 +192,8 @@ def postings_from_db(max_age_days):
         engine.dispose()
     when = f"last crawl {iso(run.finished_at or run.started_at)[:16].replace('T', ' ')} UTC, {run.status}" \
         if run else "no crawl recorded yet"
-    print(f"Database: {len(rows)} open Ashby postings from {len(slugs)} companies ({when}).")
+    live = sum(1 for status in checked.values() if status == "live")
+    print(f"Database: {len(rows)} open Ashby postings from {live} live companies ({when}).")
     postings = [Posting(source=r.source, company=r.company_slug, posting_id=r.posting_id, title=r.title, url=r.url,
                         locations=tuple(r.locations or ()), workplace=r.workplace, department=r.department,
                         employment_type=r.employment_type, published_at=iso(r.published_at),

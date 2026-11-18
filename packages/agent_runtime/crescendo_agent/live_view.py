@@ -79,7 +79,8 @@ class LiveViewHandle:
 # Define create_viewer_app with parameters host, traffic_token, vnc_password, secret, local_origin,
 # transport, on_connected, on_disconnected, on_error.
 def create_viewer_app(host, traffic_token, vnc_password, secret, local_origin, *, transport=None,
-                      on_connected=None, on_disconnected=None, on_error=None):
+                      on_connected=None, on_disconnected=None, on_error=None,
+                      cookie_name="crescendo_viewer", cookie_max_age=180):
     # Check whether not (host) or any((character not in
     # 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-' for character in host)).
     if not host or any(character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-" for character in host):
@@ -105,7 +106,7 @@ def create_viewer_app(host, traffic_token, vnc_password, secret, local_origin, *
     # Define authorized with parameters cookies.
     def authorized(cookies):
         # Return compare_digest(cookies.get('crescendo_viewer', '').encode(), secret.encode()).
-        return compare_digest(cookies.get("crescendo_viewer", "").encode(), secret.encode())
+        return compare_digest(cookies.get(cookie_name, "").encode(), secret.encode())
 
     # Register this function as the route for the indicated HTTP method or WebSocket path;
     # dependencies enforce the configured boundary.
@@ -124,7 +125,7 @@ def create_viewer_app(host, traffic_token, vnc_password, secret, local_origin, *
         # Set response to RedirectResponse('/vnc.html?' + query, headers=private_headers).
         response = RedirectResponse("/vnc.html?" + query, headers=private_headers)
         # Call response.set_cookie with 'crescendo_viewer', secret.
-        response.set_cookie("crescendo_viewer", secret, httponly=True, samesite="strict", max_age=180)
+        response.set_cookie(cookie_name, secret, httponly=True, samesite="strict", max_age=cookie_max_age)
         # Return response.
         return response
 
@@ -143,6 +144,7 @@ def create_viewer_app(host, traffic_token, vnc_password, secret, local_origin, *
             return
         # Set tasks to an empty list.
         tasks = []
+        connected = False
         # Try the following operations; matching except clauses handle failures. The finally block
         # runs on every exit.
         try:
@@ -160,6 +162,7 @@ def create_viewer_app(host, traffic_token, vnc_password, secret, local_origin, *
                 # Await completion without blocking the event loop: Call browser.accept with the
                 # arguments shown.
                 await browser.accept(subprotocol=upstream.subprotocol)
+                connected = True
                 # Check whether on_connected.
                 if on_connected:
                     # Call on_connected with no arguments.
@@ -224,7 +227,7 @@ def create_viewer_app(host, traffic_token, vnc_password, secret, local_origin, *
         # Always run cleanup, whether the operation succeeds, returns, or raises.
         finally:
             # Check whether on_disconnected.
-            if on_disconnected:
+            if connected and on_disconnected:
                 # Call on_disconnected with no arguments.
                 on_disconnected()
             # Use anyio.move_on_after(2, shield=True); leave the context and run its cleanup when
@@ -314,7 +317,7 @@ def create_viewer_app(host, traffic_token, vnc_password, secret, local_origin, *
 # Wrap the generator as a context manager: yield enters the with-block and exit resumes cleanup.
 @contextmanager
 # Define open_live_view with parameters sandbox.
-def open_live_view(sandbox):
+def open_live_view(sandbox, *, cookie_max_age=180):
     """Own the VNC stream and local server; sandbox cleanup belongs to caller."""
     # Set listener to socket.socket().
     listener = socket.socket()
@@ -345,6 +348,21 @@ def open_live_view(sandbox):
         secret = token_urlsafe(32)
         # Set handle to LiveViewHandle(origin + '/watch/' + secret).
         handle = LiveViewHandle(origin + "/watch/" + secret)
+        connection_lock = threading.Lock()
+        connections = 0
+
+        def viewer_connected():
+            nonlocal connections
+            with connection_lock:
+                connections += 1
+                handle.connected.set()
+
+        def viewer_disconnected():
+            nonlocal connections
+            with connection_lock:
+                connections = max(0, connections - 1)
+                if connections == 0:
+                    handle.connected.clear()
         # Define report_error with parameters code.
         def report_error(code):
             # Append code to handle.errors.
@@ -354,9 +372,11 @@ def open_live_view(sandbox):
         # Set app to the result of create_viewer_app using the arguments below.
         app = create_viewer_app(host, sandbox.traffic_access_token, sandbox.stream.get_auth_key(), secret, origin,
                                # Set on_connected to (handle.connected.clear,).
-                               on_connected=handle.connected.set, on_disconnected=handle.connected.clear,
+                               on_connected=viewer_connected, on_disconnected=viewer_disconnected,
                                # Pass keyword on_error = report_error.
-                               on_error=report_error)
+                               on_error=report_error,
+                               # Cookies ignore ports: isolate concurrent localhost viewers.
+                               cookie_name=f"crescendo_viewer_{port}", cookie_max_age=cookie_max_age)
         # Set server to uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=port,
         # access_log=False, log_level='critical', ws='websockets-sansio',
         # timeout_graceful_shutdown=1)).

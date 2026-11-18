@@ -86,6 +86,7 @@ export default function Workspace() {
         <a className="brand" href="/" aria-label="AgentCrescendo home"><span className="brandmark">≋</span> Agent<span>Crescendo</span></a>
         <div className="sidebar-label">WORKSPACE</div>
         <div className="nav-active"><span aria-hidden="true">◈</span> Task drafts</div>
+        <a className="nav-link" href="/jobs"><span aria-hidden="true">◇</span> Job search</a>
         <div className="sidebar-note"><span className="dot" /> Local development<br /><small>First movement · Foundation</small></div>
       </aside>
 

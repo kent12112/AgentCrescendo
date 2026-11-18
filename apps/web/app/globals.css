@@ -12,7 +12,7 @@
    Helvetica, sans-serif sets font fallback order. font-size=14px sets text size. */
 body { margin: 0; color: var(--ink); background: var(--paper); font-family: Arial, Helvetica, sans-serif; font-size: 14px; }
 /* Style button, textarea, select. font=inherit sets font settings inherited together. */
-button, textarea, select { font: inherit; }
+button, input, textarea, select { font: inherit; }
 /* Style button, select. cursor=pointer sets pointer appearance. */
 button, select { cursor: pointer; }
 /* Style button:disabled. cursor=not-allowed sets pointer appearance. opacity=.5 sets element
@@ -20,10 +20,10 @@ button, select { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .5; }
 /* Style button, a, textarea, select. outline-offset=4px sets distance between focus outline and
    element. */
-button, a, textarea, select { outline-offset: 4px; }
+button, a, input, textarea, select { outline-offset: 4px; }
 /* Style button:focus-visible, a:focus-visible, textarea:focus-visible, select:focus-visible.
    outline=2px solid var(--green) sets keyboard focus outline. */
-button:focus-visible, a:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--green); }
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--green); }
 /* Style .workspace. display=flex sets layout mode. min-height=100vh sets minimum element height. */
 .workspace { display: flex; min-height: 100vh; }
 /* Style .sidebar. width=252px sets element width. background=#f0f3ec sets element background.
@@ -264,3 +264,12 @@ footer { margin-top: 50px; border-top: 1px solid var(--line); padding-top: 17px;
    justify-content=space-between sets main-axis distribution in flex layout. gap=10px sets spacing
    between flex items. display=none sets layout mode. */
 @media (max-width: 720px) { .workspace { display: block; } .sidebar { width: auto; padding: 16px 20px; border-right: 0; border-bottom: 1px solid var(--line); } .sidebar-label, .nav-active, .sidebar-note { display: none; } .topbar { min-height: 55px; padding: 0 20px; } .content { padding: 36px 20px 24px; } .composer-bottom { align-items: stretch; } .primary { justify-content: space-between; } .run { gap: 10px; } .run-symbol { display: none; } }
+/* Sidebar link to another page (JOB-F08: Task drafts <-> Job search). */
+.nav-link { display: block; padding: 13px 15px; border-radius: 7px; color: var(--muted); text-decoration: none; }
+.nav-link:hover { background: #e7ede4; color: var(--ink); }
+.nav-link span { margin-right: 10px; }
+nav .nav-active { display: block; text-decoration: none; }
+@media (max-width: 720px) {
+  .sidebar nav { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 12px; }
+  .sidebar nav a { padding: 8px 10px; font-size: 12px; }
+}

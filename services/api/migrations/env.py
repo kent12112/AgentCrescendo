@@ -8,6 +8,7 @@ from crescendo_api.config import get_settings
 # Import from crescendo_api.models: Base (the SQLAlchemy registry whose metadata holds the table
 # definitions).
 from crescendo_api.models import Base
+from crescendo_api.application_models import JobApplication  # register tracker metadata
 
 
 # Define run_migrations with no parameters.

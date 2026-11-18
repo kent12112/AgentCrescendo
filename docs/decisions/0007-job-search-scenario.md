@@ -42,7 +42,10 @@ an acceptance scenario, not a hard-coded pipeline.
    URLs, the main way an offer list could mislead a user.
 5. **The resume stays off desktops** (for the next slice). Parse it on the host into a
    profile the user reviews, kept out of Git; agents receive only the fields a
-   task needs.
+   task needs. *Amended by [0009](0009-cover-letter-redacted-resume.md) (no profile; the
+   approved full letter is typed only on the offline writer desktop) and
+   [0010](0010-job-web-flow-and-tracker.md) (resume text stored in local Postgres after
+   upload).*
 
 ## Alternatives considered
 

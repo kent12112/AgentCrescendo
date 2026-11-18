@@ -39,6 +39,68 @@ from crescendo_security.policy import TaskGrant
 ORIGIN = "http://127.0.0.1:34567"
 
 
+def test_concurrent_viewer_cookies_are_isolated_on_the_same_local_host():
+    upstream = httpx.MockTransport(lambda request: httpx.Response(200, content=b"viewer"))
+    first = create_viewer_app("stream.e2b.app", "traffic", "vnc", "first-secret", ORIGIN,
+                              transport=upstream, cookie_name="viewer_one", cookie_max_age=600)
+    second = create_viewer_app("stream.e2b.app", "traffic", "vnc", "second-secret", ORIGIN,
+                               transport=upstream, cookie_name="viewer_two", cookie_max_age=600)
+    with TestClient(first, base_url=ORIGIN) as a, TestClient(second, base_url=ORIGIN) as b:
+        response = a.get("/watch/first-secret", follow_redirects=False)
+        assert "Max-Age=600" in response.headers["set-cookie"]
+        b.get("/watch/second-secret", follow_redirects=False)
+        # A browser shares both cookies across localhost ports.
+        a.cookies.update(b.cookies)
+        b.cookies.update(a.cookies)
+        assert a.get("/vnc.html").status_code == 200
+        assert b.get("/vnc.html").status_code == 200
+
+
+def test_reloaded_connection_survives_old_connections_delayed_close(monkeypatch):
+    captured = {}
+    listener = Mock()
+    listener.getsockname.return_value = ("127.0.0.1", 34567)
+    monkeypatch.setattr("crescendo_agent.live_view.socket.socket", Mock(return_value=listener))
+
+    def viewer_app(*args, **kwargs):
+        captured.update(kwargs)
+        return Mock()
+
+    monkeypatch.setattr("crescendo_agent.live_view.create_viewer_app", viewer_app)
+    monkeypatch.setattr("crescendo_agent.live_view.uvicorn.Server", lambda config: SimpleNamespace(
+        started=True, should_exit=False, run=lambda **kwargs: None))
+    sandbox = Mock()
+    sandbox.stream.get_url.return_value = "https://stream.e2b.app"
+    with open_live_view(sandbox, cookie_max_age=600) as handle:
+        captured["on_connected"]()  # original frame
+        captured["on_connected"]()  # reloaded frame connected before the old one closes
+        captured["on_disconnected"]()
+        assert handle.connected.is_set()
+        captured["on_disconnected"]()
+        assert not handle.connected.is_set()
+        assert captured["cookie_name"] == "crescendo_viewer_34567"
+        assert captured["cookie_max_age"] == 600
+
+
+def test_failed_upstream_handshake_does_not_disconnect_an_existing_viewer(monkeypatch):
+    events = []
+
+    @asynccontextmanager
+    async def fail(*args, **kwargs):
+        raise RuntimeError("private-upstream-details")
+        yield
+
+    monkeypatch.setattr("crescendo_agent.live_view.connect", fail)
+    app = create_viewer_app("stream.e2b.app", "traffic", "vnc", "secret", ORIGIN,
+        on_connected=lambda: events.append("connected"), on_disconnected=lambda: events.append("disconnected"),
+        on_error=lambda code: events.append("safe-error"))
+    with TestClient(app, base_url=ORIGIN) as client:
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect(ORIGIN.replace("http://", "ws://") + "/websockify", headers={"origin": ORIGIN, "cookie": "crescendo_viewer=secret"}):
+                pass
+    assert events == ["safe-error"]
+
+
 # Define app_with_transport with parameters handler.
 def app_with_transport(handler):
     return create_viewer_app("stream.e2b.app", "private-traffic-token", "vnc-password",

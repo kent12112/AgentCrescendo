@@ -298,3 +298,69 @@ def test_country_filter_drops_remote_abroad_keeps_unknown():
     assert len(rank(jobs, {"Python"}, "ai engineer")) == 5              # no country: unchanged
     row = rank(jobs, {"Python"}, "ai engineer", country="united states")[0].as_dict()
     assert "countries" in row
+
+
+# --- Incremental company-list refresh ---
+
+
+def test_refresh_merges_defers_failed_crawls_and_retries_later(tmp_path):
+    from crescendo_agent.common_crawl import CrawlResult
+    from crescendo_agent.job_cache import refresh_company_list
+
+    clock = Clock()
+    cache = JobCache(tmp_path, now=clock)
+    calls = []
+    outcomes = iter([
+        CrawlResult(boards=[CompanyBoard("ashby", "a")], indexes_read=["CC-MAIN-2026-43"],
+                    errors=["CC-MAIN-2026-39: Common Crawl kept failing (HTTP 504) after 4 attempts."]),
+        CrawlResult(),                                                   # nothing new to read
+        CrawlResult(boards=[CompanyBoard("ashby", "b")], indexes_read=["CC-MAIN-2026-39"]),
+    ])
+
+    def crawl(client, source, *, crawls, skip, budget_seconds, progress):
+        calls.append(sorted(skip))
+        return next(outcomes)
+
+    first = refresh_company_list(None, cache, crawl=crawl, retry_failed_after_days=7)
+    assert [b.slug for b in first["boards"]] == ["a"] and first["deferred"] == []
+    saved_at = cache.load_companies("ashby")[1]
+
+    clock.t += 2 * 86400                                                 # 2 days: still deferred
+    second = refresh_company_list(None, cache, crawl=crawl, retry_failed_after_days=7)
+    assert calls[1] == ["CC-MAIN-2026-39", "CC-MAIN-2026-43"] and second["deferred"] == ["CC-MAIN-2026-39"]
+    assert [b.slug for b in second["boards"]] == ["a"]                   # a failed refresh never shrinks it
+    assert cache.load_companies("ashby")[1] == saved_at
+
+    clock.t += 6 * 86400                                                 # 8 days: retried, and it works
+    third = refresh_company_list(None, cache, crawl=crawl, retry_failed_after_days=7)
+    assert calls[2] == ["CC-MAIN-2026-43"] and third["added"] == 1
+    boards, new_saved_at, details = cache.load_companies("ashby")
+    assert [b.slug for b in boards] == ["a", "b"] and new_saved_at == clock.t
+    assert details["failed_attempts"] == {} and details["indexes_read"] == ["CC-MAIN-2026-43", "CC-MAIN-2026-39"]
+
+
+# --- rank(): reusable analysis and hidden-by-filter counts (JOB-F08) ---
+
+
+def test_rank_counts_why_relevant_postings_were_hidden_and_reuses_analysis():
+    from crescendo_agent.job_match import posting_analysis
+
+    jobs = [a_posting(posting_id="1", title="AI Engineer", description="Python"),
+            a_posting(posting_id="2", title="Senior AI Engineer"),
+            a_posting(posting_id="3", title="AI Engineer B", locations=("London",), countries=("United Kingdom",)),
+            a_posting(posting_id="4", title="AI Engineer C", description="6+ years of experience"),
+            a_posting(posting_id="5", title="AI Engineer D", locations=("Boston",)),
+            a_posting(posting_id="6", title="Account Executive")]
+    dropped, calls = {}, []
+
+    def analysis(posting):
+        calls.append(posting.posting_id)
+        return posting_analysis(posting)
+
+    rows = rank(jobs, {"Python"}, "ai engineer", country="USA", location="new york", no_senior=True,
+                max_years=3, analysis=analysis, dropped=dropped)
+    assert [m.posting.posting_id for m in rows] == ["1"]
+    assert dropped == {"country": 1, "senior": 1, "years": 1, "location": 1}  # "Account Executive" is not counted
+    assert sorted(calls) == ["1", "4"]          # only postings that passed the cheap filters were analyzed
+    assert rank(jobs, {"Python"}, "ai engineer", country="USA", location="new york", no_senior=True,
+                max_years=3) == rows            # default analysis gives the same result

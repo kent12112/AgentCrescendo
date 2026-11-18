@@ -8,7 +8,8 @@ from uuid import uuid4
 # DateTime (declares a timestamp column, optionally with timezone support); Integer (declares an
 # integer column for exact counts and cents); String (declares bounded-length textual column data);
 # Text (declares variable-length text column data).
-from sqlalchemy import JSON, CheckConstraint, DateTime, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (JSON, Boolean, CheckConstraint, DateTime, ForeignKeyConstraint, Index, Integer, LargeBinary, String, Text,
+                        UniqueConstraint)
 # Import from sqlalchemy.orm: DeclarativeBase (collects ORM mappings and table metadata); Mapped
 # (marks a typed SQLAlchemy-mapped attribute); mapped_column (defines a mapped database column and
 # its options).
@@ -165,3 +166,97 @@ class JobCrawlRun(Base):
     closed: Mapped[int] = mapped_column(Integer, default=0)
     deleted: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+# --- Web job search (JOB-F08) ------------------------------------------------------
+MAX_JOB_PICKS = 3  # decision 0009 point 2; enforced by the API (PUT /jobs/picks replaces the set)
+
+
+class JobResume(Base):
+    """The user's uploaded resume text (decision 0010 point 5). At most one row; the PDF is not kept."""
+
+    __tablename__ = "job_resume"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_job_resume_single"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    filename: Mapped[str] = mapped_column(String(255))
+    text: Mapped[str] = mapped_column(Text)
+    skills: Mapped[list] = mapped_column(JSON, default=list)  # job_match.resume_skills, sorted
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class JobPick(Base):
+    """A posting the user selected for a cover letter. Removed with its posting after 30 days."""
+
+    __tablename__ = "job_picks"
+    __table_args__ = (ForeignKeyConstraint(["source", "posting_id"],
+                                           ["job_postings.source", "job_postings.posting_id"],
+                                           name="fk_job_picks_posting", ondelete="CASCADE"),)
+
+    source: Mapped[str] = mapped_column(String(20), primary_key=True)
+    posting_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    picked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class LetterSession(Base):
+    """An immutable preview of exactly the redacted input the user consents to send."""
+
+    __tablename__ = "letter_sessions"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    input_digest: Mapped[str] = mapped_column(String(64))
+    inputs: Mapped[dict] = mapped_column(JSON)
+    # Identity stays on the host and is restored only after draft approval.
+    identity: Mapped[dict] = mapped_column(JSON)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class CoverLetter(Base):
+    """Independent posting snapshot: daily crawl deletion must not remove a saved letter."""
+
+    __tablename__ = "cover_letters"
+    __table_args__ = (CheckConstraint("status IN ('pending', 'generating', 'failed', 'draft', 'approved')",
+                                     name="ck_cover_letters_status"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    session_id: Mapped[str] = mapped_column(String(36), index=True)
+    posting: Mapped[dict] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    text: Mapped[str] = mapped_column(Text, default="")
+    checks: Mapped[list] = mapped_column(JSON, default=list)
+    # Thinker/Worker/Verifier trace for the latest generation, saved after each turn.
+    turns: Mapped[list] = mapped_column(JSON, default=list)
+    error: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+WRITER_ACTIVE = ("starting", "preparing", "waiting_viewer", "drafting", "typing", "exporting", "cancelling")
+WRITER_STATUS_CHECK = "status IN ('starting', 'preparing', 'waiting_viewer', 'drafting', 'typing', 'exporting', 'cancelling', 'saved', 'failed', 'cancelled')"
+
+
+class WriterExport(Base):
+    """A draft preview or approved export, with a bounded desktop lease."""
+
+    __tablename__ = "writer_exports"
+    __table_args__ = (
+        UniqueConstraint("letter_id", "letter_version", name="uq_writer_export_version"),
+        ForeignKeyConstraint(["letter_id"], ["cover_letters.id"], ondelete="CASCADE", name="fk_writer_export_letter"),
+        CheckConstraint(WRITER_STATUS_CHECK, name="ck_writer_export_status"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    letter_id: Mapped[str] = mapped_column(String(36), index=True)
+    letter_version: Mapped[int] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text)  # immutable after generation/approved snapshot
+    purpose: Mapped[str] = mapped_column(String(10), default="export", server_default="export")
+    status: Mapped[str] = mapped_column(String(20), default="starting")
+    attempt: Mapped[int] = mapped_column(Integer, default=1)
+    owner_id: Mapped[str] = mapped_column(String(36))
+    characters_typed: Mapped[int] = mapped_column(Integer, default=0)
+    pdf: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    error: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    cleanup_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    diagnostics: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

@@ -2,6 +2,13 @@
 
 Status: agreed design, before implementation.
 
+Current direction, November 17, 2026: the user is dropping E2B from this project's
+core flow to focus on faster job finding with agents. The desktop architecture
+below records the earlier design. [Decision 0015](decisions/0015-tool-first-job-agents.md)
+proposes bounded parallel job analysis and selected-company research; runtime
+decoupling and a revised implementation baseline are still pending. Preserve the
+existing permission, persistence, cancellation and source-evidence principles.
+
 See [visual architecture and technical decisions](visual-architecture.md) for the stack diagram, execution sequence, conflict-resolution flow, and decision tradeoffs.
 
 ## Product and scope

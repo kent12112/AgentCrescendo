@@ -53,6 +53,26 @@ def test_initial_migration_can_upgrade_and_downgrade(tmp_path, monkeypatch):
         assert job_tables <= set(inspect(engine).get_table_names())
         assert {"ix_job_postings_company", "ix_job_postings_published_at"} <= {
             index["name"] for index in inspect(engine).get_indexes("job_postings")}
+        # 0005: resume and picks; picks reference postings and cascade on delete.
+        assert {"job_resume", "job_picks"} <= set(inspect(engine).get_table_names())
+        keys = inspect(engine).get_foreign_keys("job_picks")
+        assert keys[0]["referred_table"] == "job_postings" and keys[0]["options"].get("ondelete") == "CASCADE"
+        assert {"letter_sessions", "cover_letters"} <= set(inspect(engine).get_table_names())
+        assert not inspect(engine).get_foreign_keys("cover_letters")
+        assert "writer_exports" in inspect(engine).get_table_names()
+        assert "purpose" in {c["name"] for c in inspect(engine).get_columns("writer_exports")}
+        command.downgrade(config, "0008")
+        assert "purpose" not in {c["name"] for c in inspect(engine).get_columns("writer_exports")}
+        assert "diagnostics" in {c["name"] for c in inspect(engine).get_columns("writer_exports")}
+        command.downgrade(config, "0007")
+        assert "diagnostics" not in {c["name"] for c in inspect(engine).get_columns("writer_exports")}
+        assert inspect(engine).get_foreign_keys("writer_exports")[0]["referred_table"] == "cover_letters"
+        command.downgrade(config, "0006")
+        assert "writer_exports" not in inspect(engine).get_table_names()
+        command.downgrade(config, "0005")
+        assert not {"letter_sessions", "cover_letters"} & set(inspect(engine).get_table_names())
+        command.downgrade(config, "0004")
+        assert not {"job_resume", "job_picks"} & set(inspect(engine).get_table_names())
         command.downgrade(config, "0003")
         assert not job_tables & set(inspect(engine).get_table_names())
         assert "workflow_id" in {column["name"] for column in inspect(engine).get_columns("runs")}

@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     # defaults match a local development server.
     temporal_address: str = "127.0.0.1:7233"
     temporal_namespace: str = "default"
+    groq_api_key: SecretStr | None = None
+    letter_model: str = "openai/gpt-oss-120b"
+    # Must support Groq's server-side browser_search tool (gpt-oss models, November 2026).
+    research_model: str = "openai/gpt-oss-120b"
+    e2b_api_key: SecretStr | None = None
 
     # Register field validation/normalization to run during Pydantic model validation.
     @field_validator("dev_api_token")

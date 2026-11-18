@@ -4,6 +4,14 @@ Capacity: approximately eight hours per week, 48 hours total. This is a constrai
 
 Design reference: [visual architecture and technical decisions](visual-architecture.md).
 
+Priority update, November 17, 2026: user requested skipping E2B and exploring agents
+that speed up job finding. The desktop-focused milestones below are historical
+scope, not the next work queue. [Decision 0015](decisions/0015-tool-first-job-agents.md)
+records a proposed next slice: remove the web's desktop dependency, retain cached
+search, add bounded parallel job-fit analysis with progressive evidence/results,
+then research/write for selected jobs. Rebaseline scope and benchmark the new slice
+before expanding roles; no proposed worker is marked implemented by this update.
+
 ## Learning and career objective
 
 The builder enjoys learning deeply and is targeting applied AI engineering at Anthropic. This project should develop transferable engineering judgment and produce evidence of that judgment; it is not a claim about Anthropic's hiring requirements or a guarantee of employment.
@@ -158,9 +166,44 @@ slices first; multi-agent steps land with Weeks 3–4.
   matches in 7 s. Real-resume run: vocabulary extended (25 -> 38 skills), early-career/location
   filters and duplicate grouping added; 12 HN months gave 8 relevant New York/US roles. Open: the
   user's judgment of the ranking and broader company coverage.
-- [ ] JOB-F03: User choice gate between offers and research (needs W4-F02 run commands).
-- [ ] JOB-F04: Company research on the chosen posting's public pages, with sources.
-- [ ] JOB-F05: Cover letter whose claims cite the profile or a visited page.
+- [ ] JOB-F03: Job picker. The user picks up to 3 postings from `find_jobs.py --json` output
+  (CLI now; the dashboard later via W4-F02 run commands). No separate profile:
+  [decision 0009](decisions/0009-cover-letter-redacted-resume.md). November 17, 2026:
+  `scripts/pick_jobs.py`, 45 offline tests, 779 real rows accepted; awaiting the user's try.
+- [ ] JOB-F04: Company researcher on a browsing desktop: starts at the chosen posting, follows
+  links to the company site, finishes with facts plus short quotes and URLs; the host keeps a
+  fact only if its quote appeared on that page. No `type_text`, no resume data.
+  *Correction ([decision 0010](decisions/0010-job-web-flow-and-tracker.md)): Ashby posting pages
+  render blank without page scripts, so for Ashby jobs start at the company's own site.*
+- [ ] JOB-F05: Cover-letter writer ([decision 0009](decisions/0009-cover-letter-redacted-resume.md)).
+  Identity removed from the resume on the host (re-scanned, previewed, confirmed), Groq drafts
+  from resume + posting + checked facts, the host flags candidate claims not in the resume and
+  company claims not in a checked quote; the user approves; placeholders are filled on the host;
+  the offline writer desktop types it and exports the PDF (JOB-P01 pipeline).
+  November 17: first connected web slice implemented by Codex at the user's request:
+  resume + posting/company + optional user company notes → immutable redacted preview
+  and consent → bounded Groq requests → source quotes/flags → edit/approve/download.
+  One live fictional-input Groq draft passed; isolated real frontend/API browser smoke
+  passed. Source matching does not prove semantic support; paraphrases need review.
+  November 18: company-specific writing brief and multi-source sentence evidence
+  added under [decision 0016](decisions/0016-company-specific-letters.md). Product/
+  culture context still comes from the posting and user notes, not company research.
+  Approved-letter live Writer is now connected: real noVNC view, explicit typing
+  start, offline keyboard input, visible PDF export, verified PDF storage/download,
+  cancellation, and reload recovery. A real E2B fictional-letter browser pass kept
+  all approved words and confirmed cleanup. Independent company research remains
+  open. See
+  [decision 0011](decisions/0011-connected-letter-drafting.md).
+  Reliability follow-up: full-length Unicode acceptance now passes (1,094 characters,
+  exact Writer document, verified PDF and cleanup); ASCII guest locale failure fixed
+  with explicit UTF-8 keyboard commands. Wide integrated desktop/review panes,
+  fullscreen, and measured faster typing in
+  [decision 0013](decisions/0013-writer-unicode-and-workspace.md).
+  Interaction correction ([decision 0014](decisions/0014-draft-before-approval.md)):
+  the web now opens the real desktop before the model request, types the generated
+  redacted draft before review/approval, and preserves a separate final PDF export.
+  No name restoration or downloadable preview PDF before approval; interrupted
+  desktop typing retains completed model text for review or unchanged-preview retry.
 - [ ] JOB-F06: Company coverage from Common Crawl (Ashby first). Read the public Common Crawl
   URL index for `jobs.ashbyhq.com/*` over the latest few monthly crawls, keep checked company
   slugs, and cache the list (~monthly) and each board's postings (~daily) locally so a search
@@ -170,7 +213,27 @@ slices first; multi-agent steps land with Weeks 3–4.
   November 17, 2026: 52 offline tests; live 3,137 Ashby companies (2 of 6 crawls, rest HTTP
   504); 133 US matches in 16 s from cache vs 12 from HN. Discovery moved to the background
   `scripts/refresh_job_companies.py` (not yet run live). Awaiting the user's review.
-- [ ] JOB-F07: Daily Ashby crawl into Postgres ([decision 0008](decisions/0008-job-storage-daily-crawl.md)).
+- [ ] JOB-F08: Web job search and live letter session ([decision 0010](decisions/0010-job-web-flow-and-tracker.md)).
+  Ranked postings from Postgres with editable pre-filled filters, job cards (score parts,
+  pay, location, skills, gaps, link, expandable highlighted description), crawl freshness,
+  hidden-by-filter counts; select up to 3 (server-enforced); "Write cover letter" shows each
+  job's desktop live with step status; letters (text, claim checks, PDF) saved and listed.
+  November 17: search, filters, highlighted details, picks, redacted-input preview,
+  saved letter sessions/library, generation, review/edit/approve, text download, and
+  browser print-to-PDF connected and browser-tested. The approved-letter Writer
+  desktop and stored verified PDF are now connected and live-tested; independent
+  company browsing and durable multi-desktop orchestration keep the full task open.
+  See [decision 0012](decisions/0012-live-writer-exports.md).
+- [ ] JOB-F09: Application tracker. Statuses ready → applied → interviewing → offer/rejected/
+  withdrawn with dates, notes, follow-up; marked by the user; posting copy kept beyond the
+  30-day window; "Applied" badges and hide-applied in search.
+- [x] JOB-F10: Resume upload in the local app; extracted text stored in local Postgres as the
+  0009 fact source (PDF not kept); redaction still applies before any Groq request.
+  November 17: Claude's upload/search API preserved; Codex connected input-preview
+  consent and letter generation. API tests and isolated UI upload/reload checks pass;
+  PostgreSQL migrated to 0006. Real provider check used a fictional resume only.
+- [ ] JOB-F07 (acceptance evidence November 17, 2026: 2 live runs, launchd exit 0; awaiting
+  user review): Daily Ashby crawl into Postgres ([decision 0008](decisions/0008-job-storage-daily-crawl.md)).
   Migration 0004 (companies, postings with first/last seen and closed dates, crawl runs);
   postings published in the last 30 days; only boards that answered close postings;
   `find_jobs.py` reads the database; launchd runs `scripts/crawl_jobs_daily.py` daily.

@@ -1,14 +1,94 @@
 # Current development status
 
-Updated: November 17, 2026, by Claude.
+Updated: November 18, 2026, by Codex.
 Implementation baseline: `584e662`.
 Current milestone: Week 1 — one useful, constrained desktop agent.
 
 This is an evidence summary, not a declaration that Week 1 is complete.
 
+Local startup November 18: Codex opened Docker Desktop, started the existing
+PostgreSQL service, ran migrations, and launched the API/frontend at the user's
+request. `/health` on port 8000 and `/jobs` on port 3000 returned HTTP 200.
+Servers remain running; no application changes or provider calls. Startup
+documentation ownership released. See [handoff](handoffs/2026-11-18-codex-local-startup.md).
+
+## Current direction — November 17, 2026
+
+User requested dropping E2B for this project because its complexity has low ROI,
+and exploring multi-agent work to speed up job finding. The existing desktop code
+and evidence below are preserved; the running app has **not yet been decoupled**
+from E2B. Treat desktop milestone completion as historical evidence, not the next
+product priority. Proposed next slice: cached shortlist → bounded parallel job-fit
+analysts → progressive evidence-backed cards, followed by company research and
+letters for selected jobs. Agent roles and budgets are proposals, not implemented
+features. See [decision 0015](decisions/0015-tool-first-job-agents.md) and
+[design handoff](handoffs/2026-11-17-codex-job-agent-pivot.md).
+
 ## Implemented and observed
 
+- Company-specific letter writing (November 18, Codex): revised fit-argument
+  prompt, primary plus additional sentence quotes, source-review display and more
+  useful company-context guidance. **944 passed, 4 skipped**, TypeScript,
+  isolated production build and fake-provider browser smoke passed. Fictional
+  Groq samples demonstrated the evidence shape, with writing/validation limits;
+  no broad quality claim or automatic company research. Existing drafts preserved.
+  See [handoff](handoffs/2026-11-18-codex-company-fit-letters.md) and
+  [decision 0016](decisions/0016-company-specific-letters.md).
+- Live watching now starts with drafting (November 17, Codex): real Writer opens
+  before the model request; Start drafting → generate redacted draft → visible
+  typing → review/approval → optional final PDF. Migration `0009` separates draft
+  previews from approved exports. Completed model text survives desktop failure or
+  Stop; unchanged-preview retry reuses it. Preview PDFs are checked then discarded
+  and cannot be downloaded. **937 passed, 4 skipped**, production build, mock browser
+  flow, PostgreSQL schema check, and real E2B draft-first browser flow passed. The
+  fictional 1,062-character draft typed in 14.862 s, exact ODT text; final approved
+  1,094-character PDF also passed, both desktops cleaned up. Groq was fake in the
+  real-desktop browser check. See [handoff](handoffs/2026-11-17-codex-live-drafting.md)
+  and [decision 0014](decisions/0014-draft-before-approval.md).
+- Writer typing reliability and workspace (November 17, Codex): reproduced the
+  desktop's ASCII command locale rejecting Unicode punctuation; explicit UTF-8
+  keyboard commands fix it. Full Unicode fictional browser pass: 1,094 characters
+  typed in **15.334 s**, complete export **79.512 s**, one-page verified PDF, exact
+  Writer document text, reload/review-pane recovery, cleanup confirmed. PDF check
+  permits only the observed nonbreaking-hyphen layout representation, besides
+  whitespace. Wide integrated desktop pane, fullscreen, serialized/backed-off
+  polling, safe operation errors/timings, migration `0008`. **930 passed, 4 skipped**;
+  production build, mock UI check, real E2B stress check, PostgreSQL schema check
+  passed. Cold preparation remains about 38 s in this pass; this is one fixture,
+  not a reliability benchmark. See [handoff](handoffs/2026-11-17-codex-writer-reliability-ux.md).
+- Live approved-letter Writer connected (November 17, Codex): approve → open private
+  offline E2B/LibreOffice desktop → watch in the page → explicitly start real typing
+  → visible PDF export → word comparison → PDF saved in Postgres/downloadable after
+  cleanup. Stop, page reconnect, expected-version/edit checks, duplicate prevention,
+  and bounded abandoned leases included. PostgreSQL `0007`; schema check passed.
+  **921 tests passed, 4 skipped**, production build and fake-provider browser check
+  passed. A real E2B browser pass (fictional 152-character letter, fake Groq) showed
+  typing, recovered the viewer after reload, produced a matching one-page PDF, and
+  recorded cleanup. Screenshots inspected. API-process restart recovery remains
+  lease-bounded rather than durable Temporal scheduling. See
+  [handoff](handoffs/2026-11-17-codex-live-writer.md).
+- Letter failure recovery (November 17, Codex): reproduced a valid JSON draft marked
+  `finish_reason=length` being discarded by the old adapter. Strict schema/low reasoning
+  and a 3,072-token completion cap now reduce saturation; complete drafts at the limit
+  remain reviewable with a completeness flag, while truncated JSON fails. Safe messages
+  distinguish provider failures. 903 tests passed (4 skipped). The reported Notion
+  frontend-intern letter was retried through the running API using the existing
+  consented snapshot and saved as a 225-word draft in 2.9 seconds. Historical cause of
+  the original generic error cannot be proven from its saved metadata. See
+  [handoff](handoffs/2026-11-17-codex-letter-failure-recovery.md).
 - Local Next.js/FastAPI/PostgreSQL task drafts, migrations, and draft deletion.
+- Connected local job-search/letter slice (November 17, Codex): Claude's resume,
+  ranking, details, and saved picks UI/API preserved and finished. Home opens `/jobs`;
+  `/drafts` retains the old dashboard. Selected jobs lead to immutable redacted-input
+  preview/consent, Groq drafting from resume + posting/company + optional user notes,
+  source evidence/review flags, editable saved drafts, approval, text download, and
+  browser print-to-PDF. Local Postgres upgraded `0005 -> 0006`; schema check passed.
+  884 tests passed (4 skipped), TypeScript/production build and isolated real
+  frontend/API browser smoke passed. Two fictional-source live model successes;
+  one intervening safe drafting failure was not classified. No user resume sent
+  during that verification. Independent company research remains open; Writer is
+  now connected as recorded above.
+  See [handoff](handoffs/2026-11-17-codex-job-letter-workspace.md).
 - Gateway authorization, task identities, destination restrictions, step/deadline
   checks, E2B cleanup paths, text research, page search, and vision/scroll loops.
 - Authenticated loopback live-view proxy, tested with a simulated upstream.
@@ -87,12 +167,90 @@ All tasks below are unassigned. Claim only the task you are actually starting.
 | W1-6 | Connect permitted public-page research to screenshot observation and model-selected scrolling; produce a cited answer while the user watches the same desktop (plan W1-F09) | Unassigned | Done (F09): user watched a live Wikipedia pass with a cited, on-screen-verified answer; see [W1-6 handoff](handoffs/2026-11-13-claude-w1-6-visual-research.md) |
 
 Suggested next task: decide W1-4's second model candidate (user), the last Week 1 gate.
+Job track: [decision 0009](decisions/0009-cover-letter-redacted-resume.md) (November 17,
+user) drops the profile step; Groq drafts letters from a resume with identity removed, up
+to 3 per session. CLI picks and the first connected web drafting slice are implemented.
+Next, unclaimed: independent company research (JOB-F04) and durable desktop
+scheduling/recovery. The live offline Writer/PDF portion is connected. See
+[decision 0011](decisions/0011-connected-letter-drafting.md) for the current scope.
 Open public-web follow-up: whether to allow fonts (and images) so public pages are
 readable ([decision 0004](decisions/0004-public-web-mode.md)). Networking and live-view
 boundaries are measured for allowlist and public-web modes; rerun both checks after
 E2B, Chrome, or SDK upgrades.
 
 ## Active ownership
+
+SEARCH-TRACKER **claimed by Codex** primary session November 18, 2026. Simplify
+Ashby search and add persistent manual application tracking. Expected edits:
+job search/card/shell/side-panels/types/API/CSS, new applications page/proxies,
+`routes/jobs.py`, `job_search.py`, new application model/migration/tests, docs.
+Claude's WHY-COMPANY files remain reserved; coordination question pending with
+the user. No agents spawned or Claude launched.
+
+WHY-COMPANY **implemented and released by Claude** (VS Code session) November 18,
+2026. "Why [company]?" answers with Copy (no PDF/Writer in the page), a company
+researcher (Groq browser_search; public inputs only; host re-fetches each cited page
+and keeps only quotes found there), and a TRINITY-style Thinker/Worker/Verifier loop
+(max 5 turns, Verifier + host checks must accept). Migration `0010`, decision 0017.
+**965 passed, 4 skipped**; typecheck; isolated browser smoke with fake providers.
+No live Groq run yet. `smoke_job_search.py` still targets the removed Writer UI.
+See [handoff](handoffs/2026-11-18-claude-why-company.md).
+
+LETTER-FIT **implemented and released by Codex** primary session November 18,
+2026. Prompt, multi-source sentence evidence, notes guidance, tests/browser smoke
+and documentation complete; ready for user evaluation on a new draft. No active
+ownership or delegation. **944 passed, 4 skipped**, TypeScript, isolated production
+build, browser smoke and fictional Groq results in the
+[handoff](handoffs/2026-11-18-codex-company-fit-letters.md). Existing drafts and
+consented snapshots preserved; independent company research remains open.
+
+LIVE-DRAFT **implemented and released by Codex** November 17, 2026. Real desktop
+watching moved into letter drafting before review/approval; redacted sources and
+final approval gates preserved. Writer lifecycle/model/routes, drafting UI/consent,
+migration 0009, tests/smoke and docs complete. No active ownership or delegation;
+existing uncommitted work preserved. **937 passed, 4 skipped**, build, mock and real
+E2B browser flow passed; see [handoff](handoffs/2026-11-17-codex-live-drafting.md).
+
+WRITER-RELIABILITY-UX **implemented and released by Codex** on November 17, 2026.
+UTF-8 keyboard fix, bounded faster typing, narrow PDF hyphen comparison, safe
+diagnostics/migration 0008, integrated wide live/review workspace, fullscreen, and
+serialized/background polling complete. Existing work and approved snapshots
+preserved; all live reproduction uses fictional data. No active ownership. Full
+suite: 930 passed, 4 skipped; real Unicode E2B browser pass and remaining limits in
+the [handoff](handoffs/2026-11-17-codex-writer-reliability-ux.md).
+
+WRITER-LIVE **implemented and released by Codex** on November 17, 2026, at the user's
+explicit request. Shared Writer adapter/helpers, private viewer cookie/reconnect
+fixes, API export service/routes/model and migration 0007, frontend live controls,
+and verified PDF persistence/download connected. Existing work preserved. Full
+suite: 921 passed, 4 skipped; production build, fake-provider browser regression,
+PostgreSQL schema check, and real E2B fictional-letter browser pass recorded in the
+[handoff](handoffs/2026-11-17-codex-live-writer.md). No active ownership. No user
+letter was sent to E2B during validation; actual exports require approval and an
+explicit Open live Writer / Start typing action.
+
+LETTER-FAILURE **implemented and released by Codex** on November 17, 2026. Changed
+only the letter provider adapter, provider failure tests, and supporting docs. 903
+tests passed (4 skipped). Fictional-source reproduction and revised live request
+passed; after diagnosis, the reported frontend-intern draft was recovered through
+the running API using its already-consented saved inputs. Successful other drafts
+were left untouched; approval remains the user's action. See
+[handoff](handoffs/2026-11-17-codex-letter-failure-recovery.md). No active ownership.
+
+JOB-F08 frontend + JOB-F05 first connected letter slice **implemented and released by
+Codex** on November 17, 2026, at the user's explicit request to take over the frontend
+and build the missing letter generation. Ready for user/reviewer evaluation. Claude's
+existing uncommitted work preserved. No active Codex ownership. 884 Python tests
+passed (4 skipped), production build/typecheck, isolated browser smoke, PostgreSQL
+migration/schema check, and fictional-source live model checks recorded in the
+[handoff](handoffs/2026-11-17-codex-job-letter-workspace.md). Full JOB-F04/F05/F08
+desktop acceptance remains open; do not infer live research or Writer work from this UI.
+
+JOB-F03 (job picker) implemented and released by Claude on November 17, 2026; ready
+for review. `scripts/pick_jobs.py` shows the newest ranked list and saves up to 3 picks
+(checked board + posting ID) to `.demo-artifacts/jobs-picked-<id>.json`. 45 offline tests;
+full suite 859 passed (4 skipped); 779 real ranked rows, 0 wrongly refused. See
+[handoff](handoffs/2026-11-17-claude-job-f03-job-picker.md). Uncommitted.
 
 JOB-P01 (writer desktop probe: no-internet E2B desktop types a fictional letter in
 LibreOffice Writer, exports a PDF, host downloads it) written and released by Claude
@@ -106,12 +264,16 @@ layout intact, only AutoCorrect typography differs). Complete as a probe. Follow
 typing) **passed live in run 5** (exact word match, visible export, 30 characters/s). 27 offline tests; full suite 813 passed (4 skipped). See
 [handoff](handoffs/2026-11-17-claude-job-p01-writer-probe.md). Uncommitted.
 
-JOB-F07 (daily Ashby crawl into Postgres, 30-day window, launchd schedule) **claimed by
-Claude** (VS Code session) on November 17, 2026, at the user's request. Files: migration
-`0004_job_postings.py`, `crescendo_api/models.py` (job models), `crescendo_api/job_store.py`,
-`job_cache.refresh_company_list`, `scripts/crawl_jobs_daily.py`,
-`scripts/install_jobs_schedule.py`, `scripts/find_jobs.py`, `scripts/refresh_job_companies.py`,
-tests, decision 0008, plan, handoff. Local database migrated 0002 -> 0004 (0003 was pending).
+JOB-F07 (daily Ashby crawl into Postgres, 30-day window, launchd schedule) implemented
+and released by Claude on November 17, 2026; ready for review. Migration 0004 (job
+companies, postings with first/last seen and closed dates, crawl runs; local database
+migrated 0002 -> 0004). `scripts/crawl_jobs_daily.py` syncs ~3,100 Ashby boards (only
+boards that answered close postings) and is run at 08:00 by a launchd agent
+(`scripts/install_jobs_schedule.py`; installed). `find_jobs.py` reads Postgres (119 US
+matches in 3 s). Live: run 1 inserted 19,643 postings; launchd run 2 exited 0 with +16
+new, 19,638 updated, 5 closed. 814 tests passed (4 skipped). See
+[decision 0008](decisions/0008-job-storage-daily-crawl.md) and
+[handoff](handoffs/2026-11-17-claude-job-f07-daily-crawl.md). Uncommitted.
 
 JOB-F06 (Ashby companies from Common Crawl, local caches, country filter) implemented
 and released by Claude on November 17, 2026; ready for review. Company discovery reads

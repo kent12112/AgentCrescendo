@@ -65,6 +65,8 @@ def main():
                         help="Time limit for reading new Common Crawl crawls (default 10).")
     parser.add_argument("--window-days", type=int, default=WINDOW_DAYS,
                         help=f"Keep postings published within this many days (default {WINDOW_DAYS}).")
+    parser.add_argument("--retry-failed-days", type=float, default=7,
+                        help="Retry a Common Crawl crawl that failed only after this many days (default 7).")
     parser.add_argument("--workers", type=int, default=8, help="Parallel board requests (1-16; default 8).")
     parser.add_argument("--no-start-db", action="store_true",
                         help="Do not run `docker compose up -d db` when the database is down.")
@@ -87,9 +89,11 @@ def main():
         try:
             with httpx.Client(headers={"User-Agent": "AgentCrescendo-job-sources/0.1"}) as client:
                 summary = refresh_company_list(client, JobCache(), budget_seconds=args.budget_minutes * 60,
+                                               retry_failed_after_days=args.retry_failed_days,
                                                progress=lambda line: log("  Common Crawl " + line))
-                for error in summary["errors"]:
-                    log(f"  Common Crawl: {error}")
+                if summary["deferred"]:
+                    log(f"  Common Crawl: not retrying {len(summary['deferred'])} crawls that failed in the "
+                        f"last {args.retry_failed_days:g} days ({', '.join(summary['deferred'])}).")
                 boards = summary["boards"]
                 if not boards:
                     raise RuntimeError("No saved Ashby company list and Common Crawl could not be read.")

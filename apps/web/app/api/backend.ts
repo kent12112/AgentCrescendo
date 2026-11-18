@@ -3,9 +3,13 @@
 // Prevent this credential-bearing module from being imported into a client component.
 import "server-only";
 
-// Define export async function backend(path: "/runs" | "/capabilities" | `/runs/${string}`, init?:
-// RequestInit) {
-export async function backend(path: "/runs" | "/capabilities" | `/runs/${string}`, init?: RequestInit) {
+// Allowed API paths. /jobs/... serves the job search page (JOB-F08).
+type ApiPath = "/runs" | "/capabilities" | `/runs/${string}` | `/jobs/${string}`;
+
+// options.timeoutMs: the first job search after a crawl builds an in-memory index and needs longer
+// than the 5-second default. options.headers: extra headers such as a PDF upload's Content-Type.
+export async function backend(path: ApiPath, init?: RequestInit,
+  options: { timeoutMs?: number; headers?: Record<string, string>; textDownload?: boolean; pdfDownload?: boolean } = {}) {
   // Restrict destinations to explicit API paths, rather than proxying arbitrary URLs.
   // Read the local API credential in server code; a NEXT_PUBLIC_ variable would expose it to the
   // client.
@@ -32,11 +36,12 @@ export async function backend(path: "/runs" | "/capabilities" | `/runs/${string}
       // might have committed before its response was lost. Idempotency is future work.
       // Cancel the upstream wait after 5 seconds; this cannot establish whether a write already
       // committed.
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(options.timeoutMs ?? 5000),
       // Set this named object/configuration property: headers: { "Content-Type":
       // "application/json", Authorization: `Bearer ${token}` },. The receiving API determines how
       // the value is used.
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      // Caller headers may replace Content-Type (resume upload) but never the credential.
+      headers: { "Content-Type": "application/json", ...options.headers, Authorization: `Bearer ${token}` },
     });
     // A successful deletion has no JSON body to parse.
     // Check this condition: if (response.status === 204) {
@@ -46,6 +51,20 @@ export async function backend(path: "/runs" | "/capabilities" | `/runs/${string}
     }
     // Decode the JSON response body; HTTP error statuses still require an explicit response.ok
     // check.
+    if (options.textDownload && response.ok) {
+      return new Response(await response.text(), { headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Content-Disposition": response.headers.get("Content-Disposition") ?? "attachment; filename=cover-letter.txt",
+        "Cache-Control": "no-store",
+      } });
+    }
+    if (options.pdfDownload && response.ok) {
+      return new Response(await response.arrayBuffer(), { headers: {
+        "Content-Type": "application/pdf", "X-Content-Type-Options": "nosniff",
+        "Content-Disposition": response.headers.get("Content-Disposition") ?? "attachment; filename=cover-letter.pdf",
+        "Cache-Control": "no-store",
+      } });
+    }
     const data = await response.json();
     // Do not relay backend exception bodies or configuration details to the browser.
     // Check this condition: if (response.status >= 500) {

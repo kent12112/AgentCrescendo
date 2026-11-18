@@ -78,9 +78,9 @@ class JobCache:
                 continue
         return (boards, data["saved_at"], data.get("details") or {}) if boards else None
 
-    def save_companies(self, source: str, boards, details=None) -> None:
+    def save_companies(self, source: str, boards, details=None, *, saved_at: float | None = None) -> None:
         _write_json(self._companies_path(source), {
-            "format": FORMAT, "saved_at": self.now(), "source": source,
+            "format": FORMAT, "saved_at": self.now() if saved_at is None else saved_at, "source": source,
             "slugs": sorted({b.slug for b in boards if b.source == source}), "details": details or {}})
 
     # Board postings ------------------------------------------------------
@@ -130,23 +130,42 @@ def fetch_boards_cached(boards, cache: JobCache | None, client=None, *, max_age_
 
 def refresh_company_list(client, cache: JobCache, source: str = "ashby", *, crawls: int = 6,
                          budget_seconds: float | None = 20 * 60, full: bool = False, progress=None,
-                         crawl=None) -> dict:
+                         crawl=None, retry_failed_after_days: float | None = None) -> dict:
     """Incrementally refresh the saved Common Crawl company list.
 
     Crawls already read are skipped; new companies are merged into the saved list,
-    so a partial or failed refresh never shrinks it; a crawl that failed is retried
-    next time. ``full`` ignores the saved list. Returns a summary dict with
-    ``boards`` (the list now in use), ``added``, ``read`` (crawls read now), ``errors``.
+    so a partial or failed refresh never shrinks it. A crawl that failed is retried
+    on a later refresh; with ``retry_failed_after_days`` set, not until that long
+    after its last failure (live, the same 4 crawls returned HTTP 504 all day, costing
+    ~10 minutes per attempt). ``full`` ignores the saved list. Returns a summary dict
+    with ``boards`` (the list now in use), ``added``, ``read`` (crawls read now),
+    ``deferred`` (failed crawls not retried yet), ``errors``.
     """
+    from .common_crawl import INDEX_ID
+
     if crawl is None:
         from .common_crawl import crawl_boards as crawl
     saved = None if full else cache.load_companies(source, max_age_days=None)
     old_boards, read_before = (saved[0], list(saved[2].get("indexes_read") or [])) if saved else ([], [])
-    result = crawl(client, source, crawls=crawls, skip=read_before, budget_seconds=budget_seconds,
+    attempts = dict((saved[2].get("failed_attempts") or {}) if saved else {})
+    now = cache.now()
+    deferred = sorted(index for index, when in attempts.items() if retry_failed_after_days is not None
+                      and isinstance(when, (int, float)) and now - when < retry_failed_after_days * 86400)
+    result = crawl(client, source, crawls=crawls, skip=read_before + deferred, budget_seconds=budget_seconds,
                    progress=progress)
+    # crawl_boards reports one "<index>: <reason>" error per crawl that failed.
+    failed_now = [error.split(":", 1)[0] for error in result.errors if INDEX_ID.match(error.split(":", 1)[0])]
+    for index in result.indexes_read:
+        attempts.pop(index, None)
+    for index in failed_now:
+        attempts[index] = now
     merged = sorted(set(old_boards) | set(result.boards), key=lambda b: b.slug)
-    if result.indexes_read:
+    if result.indexes_read or failed_now:
         indexes = sorted(set(read_before) | set(result.indexes_read), reverse=True)
-        cache.save_companies(source, merged, {"indexes_read": indexes, "last_errors": result.errors})
+        # Recording only failures keeps the list's saved date (its age means "last new crawl read").
+        cache.save_companies(source, merged, {"indexes_read": indexes, "failed_attempts": attempts,
+                                              "last_errors": result.errors},
+                             saved_at=None if result.indexes_read or not saved else saved[1])
     return {"boards": merged, "previous": len(old_boards), "added": len(merged) - len(old_boards),
-            "read": list(result.indexes_read), "read_before": read_before, "errors": list(result.errors)}
+            "read": list(result.indexes_read), "read_before": read_before, "deferred": deferred,
+            "errors": list(result.errors)}

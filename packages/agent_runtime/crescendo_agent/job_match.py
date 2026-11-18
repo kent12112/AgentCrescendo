@@ -236,26 +236,42 @@ def _location_ok(posting: Posting, locations, remote: bool) -> bool:
 
 def rank(postings, resume_skills: set[str], query: str, *, min_title_match: float = 0.6,
          location=None, remote: bool = False, max_years: int | None = None,
-         no_senior: bool = False, country: str | None = None) -> list[Match]:
+         no_senior: bool = False, country: str | None = None, analysis=None,
+         dropped: dict | None = None) -> list[Match]:
     """Score relevant postings and return them best first.
 
     location: one string or a list (any may match). max_years drops postings that
     ask for more years of experience; postings that state none are kept. country
     (e.g. "United States") drops postings known to be elsewhere, including remote
     roles abroad; postings that name no country are kept.
+
+    analysis(posting) -> (job skills, years asked) lets a caller reuse values it
+    computed once per crawl (the web search does; see posting_analysis). dropped,
+    if given, counts why title-relevant postings were filtered out, by the first
+    failing filter: "country", "location", "senior", "years" (JOB-F08 shows these).
     """
     if not words(query):
         raise ValueError("The search needs at least one word, e.g. 'applied ai engineer'.")
+    analysis = analysis or posting_analysis
     matches = []
     for posting in postings:
         relevance = title_match(query, posting.title)
-        if (relevance < min_title_match or not _location_ok(posting, location, remote)
-                or not _country_ok(posting, country) or (no_senior and is_senior_title(posting.title))):
+        if relevance < min_title_match:
+            continue  # not what was searched for; not counted as "hidden"
+        reason = None
+        if not _country_ok(posting, country):
+            reason = "country"
+        elif not _location_ok(posting, location, remote):
+            reason = "location"
+        elif no_senior and is_senior_title(posting.title):
+            reason = "senior"
+        job_skills, asked = (None, None) if reason else analysis(posting)
+        if reason is None and max_years is not None and asked is not None and asked > max_years:
+            reason = "years"
+        if reason:
+            if dropped is not None:
+                dropped[reason] = dropped.get(reason, 0) + 1
             continue
-        asked = years_asked(posting.description)
-        if max_years is not None and asked is not None and asked > max_years:
-            continue
-        job_skills = extract_skills(posting.title + "\n" + posting.description)
         matched = sorted(job_skills & resume_skills)
         missing = sorted(job_skills - resume_skills)
         coverage = len(matched) / (len(job_skills) + SMOOTHING)
@@ -263,6 +279,11 @@ def rank(postings, resume_skills: set[str], query: str, *, min_title_match: floa
         matches.append(Match(score, relevance, coverage, tuple(matched), tuple(missing), asked, posting))
     matches.sort(key=lambda m: (m.score, m.title_match, m.posting.published_at or ""), reverse=True)
     return group_duplicates(matches)
+
+
+def posting_analysis(posting: Posting) -> tuple[set[str], int | None]:
+    """(skills the posting names, years of experience it asks for). The slow part of rank()."""
+    return extract_skills(posting.title + "\n" + posting.description), years_asked(posting.description)
 
 
 def group_duplicates(matches: list[Match]) -> list[Match]:

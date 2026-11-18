@@ -39,7 +39,7 @@ def main():
                 # Set page to browser.new_page().
                 page = browser.new_page()
                 # Call page.goto with origin.
-                page.goto(origin)
+                page.goto(origin + "/drafts")
                 # Call page.get_by_role('textbox', name='Your task', exact=True).fill with goal.
                 page.get_by_role("textbox", name="Your task", exact=True).fill(goal)
                 # Call page.get_by_role('button', name='Save task draft').click with no arguments.
